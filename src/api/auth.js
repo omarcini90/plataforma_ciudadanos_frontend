@@ -9,4 +9,12 @@ export const authApi = {
     const { data } = await api.get('/auth/me');
     return data;
   },
+  requestPasswordReset: async (email) => {
+    const { data } = await api.post('/auth/password-reset/request', { email });
+    return data;
+  },
+  confirmPasswordReset: async (token, password) => {
+    const { data } = await api.post('/auth/password-reset/confirm', { token, password });
+    return data;
+  },
 };

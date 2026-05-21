@@ -16,9 +16,11 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const detail = error.response?.data?.detail;
+    const publicPaths = ['/login', '/forgot-password', '/reset-password'];
+    const onPublicAuthPage = publicPaths.some((p) => window.location.pathname.startsWith(p));
     if (status === 401) {
       localStorage.removeItem('access_token');
-      if (window.location.pathname !== '/login') {
+      if (!onPublicAuthPage) {
         window.location.href = '/login';
       }
     } else if (status >= 500) {

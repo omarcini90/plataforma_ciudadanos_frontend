@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute.jsx';
 import MainLayout from '../layouts/MainLayout.jsx';
 import LoginPage from '../pages/Login.jsx';
+import ForgotPasswordPage from '../pages/ForgotPassword.jsx';
+import ResetPasswordPage from '../pages/ResetPassword.jsx';
 import DashboardPage from '../pages/Dashboard.jsx';
 import CitizensListPage from '../pages/citizens/CitizensList.jsx';
 import CitizenFormPage from '../pages/citizens/CitizenForm.jsx';
@@ -18,6 +20,8 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/"
         element={

@@ -474,7 +474,24 @@ export default function CitizenFormPage() {
     runOCR();
   };
 
+  const resetScanFlow = () => {
+    setIneFront(null);
+    setIneBack(null);
+    ocrFingerprintRef.current = '';
+    setOcrSuccess(false);
+    setOcrLoading(false);
+    if (!isEdit) {
+      setData(empty);
+      manualCoordsRef.current = false;
+      lastQueryRef.current = '';
+      setGoogleSearch('');
+      setGooglePredictions([]);
+    }
+  };
+
   const bothIneReady = Boolean(ineFront && ineBack);
+  /** Tras OCR exitoso se oculta el paso 1; solo «Volver a escanear» reinicia la captura. */
+  const hideIneStep = ocrSuccess;
   /** Creación: tras OCR exitoso. Edición: si no está reemplazando la INE (sin archivos nuevos). */
   const showDetailsAfterOcr =
     ocrSuccess || (isEdit && existingCitizen && !bothIneReady);
@@ -558,59 +575,68 @@ export default function CitizenFormPage() {
       </header>
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <section className="card">
-          <h3 className="font-semibold text-slate-800 mb-1">Paso 1 · INE / OCR</h3>
-          <p className="text-sm text-slate-500 mb-4">
-            <span className="lg:hidden">
-              Captura o sube el frente y el reverso; al tener ambos se extraen los datos
-              automáticamente.
-            </span>
-            <span className="hidden lg:inline">
-              Sube el frente y el reverso de la INE; al tener ambos se extraen los datos
-              automáticamente.
-            </span>
-          </p>
+        {!hideIneStep && (
+          <section className="card">
+            <h3 className="font-semibold text-slate-800 mb-1">Paso 1 · INE / OCR</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              <span className="lg:hidden">
+                Captura o sube el frente y el reverso; al tener ambos se extraen los datos
+                automáticamente.
+              </span>
+              <span className="hidden lg:inline">
+                Sube el frente y el reverso de la INE; al tener ambos se extraen los datos
+                automáticamente.
+              </span>
+            </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <IneCaptureField
-              label="Frente de la INE"
-              side="front"
-              file={ineFront}
-              onChange={(f) => handleFileSelected(f, 'front')}
-            />
-            <IneCaptureField
-              label="Reverso de la INE"
-              side="back"
-              file={ineBack}
-              onChange={(f) => handleFileSelected(f, 'back')}
-            />
-          </div>
-
-          {bothIneReady && (
-            <div className="mt-4">
-              {ocrLoading ? (
-                <p className="text-sm text-brand-800 inline-flex items-center gap-2">
-                  <span
-                    className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"
-                    aria-hidden
-                  />
-                  Extrayendo datos de la INE…
-                </p>
-              ) : ocrSuccess ? (
-                <p className="text-sm text-emerald-700">
-                  Datos extraídos. Revisa el formulario y corrige si hace falta.
-                </p>
-              ) : (
-                <button type="button" className="btn-secondary" onClick={retryOCR}>
-                  Reintentar extracción OCR
-                </button>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <IneCaptureField
+                label="Frente de la INE"
+                side="front"
+                file={ineFront}
+                onChange={(f) => handleFileSelected(f, 'front')}
+              />
+              <IneCaptureField
+                label="Reverso de la INE"
+                side="back"
+                file={ineBack}
+                onChange={(f) => handleFileSelected(f, 'back')}
+              />
             </div>
-          )}
-        </section>
+
+            {bothIneReady && (
+              <div className="mt-4">
+                {ocrLoading ? (
+                  <p className="text-sm text-brand-800 inline-flex items-center gap-2">
+                    <span
+                      className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"
+                      aria-hidden
+                    />
+                    Extrayendo datos de la INE…
+                  </p>
+                ) : (
+                  <button type="button" className="btn-secondary" onClick={retryOCR}>
+                    Reintentar extracción OCR
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {showDetailsAfterOcr && (
           <>
+        {ocrSuccess && (
+          <div className="card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-emerald-200 bg-emerald-50/60">
+            <p className="text-sm text-emerald-800">
+              Los datos se procesaron correctamente. Revisa y corrige el formulario antes de
+              guardar.
+            </p>
+            <button type="button" className="btn-secondary shrink-0" onClick={resetScanFlow}>
+              Volver a escanear
+            </button>
+          </div>
+        )}
         <section className="card">
           <h3 className="font-semibold text-slate-800 mb-3">Datos personales</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
