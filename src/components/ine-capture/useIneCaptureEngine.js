@@ -16,47 +16,59 @@ export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) 
   const containerRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const streamRef = useRef(null);
-  const ownsStreamRef = useRef(false);
+  const guideRef = useRef(null);
   const loopRef = useRef(null);
   const prevSamplesRef = useRef(null);
   const stableCountRef = useRef(0);
   const capturingRef = useRef(false);
-  const bindGenerationRef = useRef(0);
+  const boundStreamRef = useRef(null);
+  const statusMessageRef = useRef('');
+  const onCapturedRef = useRef(onCaptured);
 
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const [guide, setGuide] = useState(null);
-  const [metrics, setMetrics] = useState(null);
   const [stableProgress, setStableProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const stopCamera = useCallback((stopTracks = true) => {
+  onCapturedRef.current = onCaptured;
+
+  const setMessage = (msg) => {
+    if (statusMessageRef.current === msg) return;
+    statusMessageRef.current = msg;
+    setStatusMessage(msg);
+  };
+
+  const setProgress = (value) => {
+    setStableProgress((prev) => (prev === value ? prev : value));
+  };
+
+  const clearAnalysisLoop = () => {
     if (loopRef.current) {
       clearInterval(loopRef.current);
       loopRef.current = null;
     }
-    if (stopTracks && streamRef.current && ownsStreamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
-    streamRef.current = null;
-    ownsStreamRef.current = false;
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    prevSamplesRef.current = null;
-    stableCountRef.current = 0;
-    capturingRef.current = false;
-  }, []);
+  };
+
+  const getGuideFromContainer = () => {
+    const container = containerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    const guide = getGuideRect(rect.width, rect.height);
+    guideRef.current = guide;
+    return guide;
+  };
 
   const performCapture = useCallback(async () => {
     const video = videoRef.current;
     const container = containerRef.current;
+    const guide = guideRef.current || getGuideFromContainer();
     if (!video || !container || !guide || capturingRef.current) return;
     if (!video.videoWidth) return;
 
     capturingRef.current = true;
+    clearAnalysisLoop();
     setStatus('capturing');
-    setStatusMessage('Capturando…');
+    setMessage('Capturando…');
 
     try {
       const rect = container.getBoundingClientRect();
@@ -65,110 +77,123 @@ export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) 
         height: rect.height,
       });
       const file = blobToIneFile(blob, side);
-      stopCamera(false);
       setStatus('captured');
-      onCaptured?.(file);
+      onCapturedRef.current?.(file);
     } catch (err) {
       setError(err?.message || 'Error al capturar la imagen');
       setStatus('error');
       capturingRef.current = false;
+      if (streamRef.current) startAnalysisLoopRef.current?.();
     }
-  }, [guide, onCaptured, side, stopCamera]);
+  }, [side]);
+
+  const startAnalysisLoopRef = useRef(null);
 
   const startAnalysisLoop = useCallback(() => {
-    if (loopRef.current) clearInterval(loopRef.current);
+    clearAnalysisLoop();
     loopRef.current = setInterval(() => {
       const video = videoRef.current;
       const container = containerRef.current;
       const canvas = analysisCanvasRef.current;
       if (!video || !container || !canvas || !video.videoWidth || capturingRef.current) return;
 
-      const rect = container.getBoundingClientRect();
-      const nextGuide = getGuideRect(rect.width, rect.height);
-      setGuide(nextGuide);
+      const guide = getGuideFromContainer();
+      if (!guide) return;
 
-      canvas.width = rect.width;
-      canvas.height = rect.height;
+      const rect = container.getBoundingClientRect();
+      if (canvas.width !== rect.width || canvas.height !== rect.height) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
+
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(video, 0, 0, rect.width, rect.height);
 
-      const result = analyzeGuideFrame(ctx, nextGuide, prevSamplesRef.current);
+      const result = analyzeGuideFrame(ctx, guide, prevSamplesRef.current);
       prevSamplesRef.current = result.samples;
-      setMetrics(result);
 
       if (result.ready) {
         stableCountRef.current += 1;
         const progress = Math.min(1, stableCountRef.current / STABLE_FRAMES_REQUIRED);
-        setStableProgress(progress);
-        setStatusMessage('Mantén estable…');
+        setProgress(progress);
+        setMessage('Mantén estable…');
         if (stableCountRef.current >= STABLE_FRAMES_REQUIRED) {
           performCapture();
         }
       } else {
         stableCountRef.current = 0;
-        setStableProgress(0);
+        setProgress(0);
         if (result.brightness < 35) {
-          setStatusMessage('Poca luz — acércate a una zona iluminada');
+          setMessage('Poca luz — acércate a una zona iluminada');
         } else if (result.brightness > 220) {
-          setStatusMessage('Demasiada luz — evita reflejos directos');
+          setMessage('Demasiada luz — evita reflejos directos');
         } else if (result.sharpness < 12) {
-          setStatusMessage('Enfoca la credencial dentro del marco');
+          setMessage('Enfoca la credencial dentro del marco');
         } else if (result.motion > 0.045) {
-          setStatusMessage('Coloca la INE dentro del marco y no la muevas');
+          setMessage('Coloca la INE dentro del marco y no la muevas');
         } else {
-          setStatusMessage('Alinea la credencial dentro del marco');
+          setMessage('Alinea la credencial dentro del marco');
         }
       }
     }, ANALYSIS_INTERVAL_MS);
   }, [performCapture]);
 
-  const bindStream = useCallback(
-    async (stream) => {
-      const generation = ++bindGenerationRef.current;
-      setError('');
-      setStatus('requesting');
-      setStatusMessage('Iniciando vista previa…');
+  startAnalysisLoopRef.current = startAnalysisLoop;
 
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-      const video = videoRef.current;
-      if (!video) {
-        throw new Error('Visor de cámara no disponible');
+  const attachStreamOnce = useCallback(async (stream) => {
+    if (boundStreamRef.current === stream && streamRef.current === stream) {
+      if (!loopRef.current && videoRef.current?.videoWidth) {
+        setStatus('scanning');
+        startAnalysisLoop();
       }
+      return;
+    }
 
-      streamRef.current = stream;
-      await bindStreamToVideo(video, stream);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      if (generation !== bindGenerationRef.current) return;
+    const video = videoRef.current;
+    if (!video) throw new Error('Visor de cámara no disponible');
 
-      setStatus('scanning');
-      setStatusMessage('Coloca la credencial dentro del marco');
-      startAnalysisLoop();
-    },
-    [startAnalysisLoop],
-  );
+    streamRef.current = stream;
+    boundStreamRef.current = stream;
+    setError('');
+    setStatus('requesting');
+    setMessage('Iniciando vista previa…');
+
+    await bindStreamToVideo(video, stream);
+
+    setStatus('scanning');
+    setMessage('Coloca la credencial dentro del marco');
+    stableCountRef.current = 0;
+    setProgress(0);
+    prevSamplesRef.current = null;
+    startAnalysisLoop();
+  }, [startAnalysisLoop]);
 
   useEffect(() => {
     if (!enabled) {
-      bindGenerationRef.current += 1;
-      stopCamera(false);
+      clearAnalysisLoop();
+      boundStreamRef.current = null;
+      streamRef.current = null;
+      guideRef.current = null;
+      capturingRef.current = false;
       setStatus('idle');
-      setStatusMessage('');
+      setMessage('');
+      setProgress(0);
       return undefined;
     }
 
     if (!mediaStream) {
       setStatus('waiting');
-      setStatusMessage('Sin flujo de cámara');
+      setMessage('Sin flujo de cámara');
       return undefined;
     }
 
     let cancelled = false;
-    ownsStreamRef.current = false;
 
     (async () => {
       try {
-        await bindStream(mediaStream);
+        await attachStreamOnce(mediaStream);
       } catch (err) {
         if (cancelled) return;
         const msg =
@@ -177,18 +202,15 @@ export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) 
             : err?.message || 'No se pudo iniciar la cámara';
         setError(msg);
         setStatus('error');
+        boundStreamRef.current = null;
       }
     })();
 
     return () => {
       cancelled = true;
-      bindGenerationRef.current += 1;
-      if (loopRef.current) {
-        clearInterval(loopRef.current);
-        loopRef.current = null;
-      }
+      clearAnalysisLoop();
     };
-  }, [enabled, mediaStream, bindStream, stopCamera]);
+  }, [enabled, mediaStream, attachStreamOnce]);
 
   const captureManual = useCallback(() => {
     stableCountRef.current = STABLE_FRAMES_REQUIRED;
@@ -200,16 +222,14 @@ export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) 
     const stream = streamRef.current || mediaStream;
     if (!video || !stream) return;
     try {
+      boundStreamRef.current = null;
       setError('');
-      await bindStreamToVideo(video, stream);
-      setStatus('scanning');
-      setStatusMessage('Coloca la credencial dentro del marco');
-      startAnalysisLoop();
+      await attachStreamOnce(stream);
     } catch (err) {
       setError(err?.message || 'No se pudo reproducir la cámara');
       setStatus('error');
     }
-  }, [mediaStream, startAnalysisLoop]);
+  }, [attachStreamOnce, mediaStream]);
 
   return {
     videoRef,
@@ -217,8 +237,6 @@ export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) 
     analysisCanvasRef,
     status,
     error,
-    guide,
-    metrics,
     stableProgress,
     statusMessage,
     captureManual,

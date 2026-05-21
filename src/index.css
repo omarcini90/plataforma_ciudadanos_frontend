@@ -21,6 +21,12 @@ body {
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
+/* Modal de captura INE: pantalla completa real en móvil */
+.ine-capture-modal {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
+
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium

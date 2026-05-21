@@ -1,52 +1,30 @@
+import { createPortal } from 'react-dom';
 import { IconCamera, IconRefresh, IconX } from '@tabler/icons-react';
 import { SIDE_META } from './ineCaptureConstants.js';
 import { useIneCaptureEngine } from './useIneCaptureEngine.js';
+import { useLockBodyScroll } from './useLockBodyScroll.js';
 
-function GuideOverlay({ guide, stableProgress, maskId }) {
-  if (!guide) return null;
-  const { x, y, width, height } = guide;
+/** Overlay fijo en CSS (sin SVG que se redibuja cada frame → evita parpadeo en iOS). */
+function GuideOverlay({ stableProgress }) {
   const pct = Math.round(stableProgress * 100);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10">
-      <svg className="absolute inset-0 h-full w-full" aria-hidden>
-        <defs>
-          <mask id={maskId}>
-            <rect width="100%" height="100%" fill="white" />
-            <rect
-              x={x}
-              y={y}
-              width={width}
-              height={height}
-              rx="12"
-              ry="12"
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          width="100%"
-          height="100%"
-          fill="rgba(15,23,42,0.62)"
-          mask={`url(#${maskId})`}
-        />
-      </svg>
-
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-[6%]">
       <div
-        className="absolute rounded-xl border-2 border-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
-        style={{ left: x, top: y, width, height }}
+        className="relative w-full max-w-[92%] rounded-xl border-2 border-white/90"
+        style={{
+          aspectRatio: '1.586 / 1',
+          maxHeight: '42dvh',
+          boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.62)',
+        }}
       >
         <span className="absolute -left-0.5 -top-0.5 h-7 w-7 border-l-[3px] border-t-[3px] border-accent-400 rounded-tl-lg" />
         <span className="absolute -right-0.5 -top-0.5 h-7 w-7 border-r-[3px] border-t-[3px] border-accent-400 rounded-tr-lg" />
         <span className="absolute -bottom-0.5 -left-0.5 h-7 w-7 border-b-[3px] border-l-[3px] border-accent-400 rounded-bl-lg" />
         <span className="absolute -bottom-0.5 -right-0.5 h-7 w-7 border-b-[3px] border-r-[3px] border-accent-400 rounded-br-lg" />
-
         {stableProgress > 0 && (
           <div className="absolute inset-x-3 bottom-3 h-1 overflow-hidden rounded-full bg-white/25">
-            <div
-              className="h-full bg-accent-400 transition-all duration-150"
-              style={{ width: `${pct}%` }}
-            />
+            <div className="h-full bg-accent-400" style={{ width: `${pct}%` }} />
           </div>
         )}
       </div>
@@ -54,7 +32,7 @@ function GuideOverlay({ guide, stableProgress, maskId }) {
   );
 }
 
-export default function IneCaptureModal({ open, side, mediaStream, onClose, onCaptured }) {
+function IneCaptureModalContent({ side, mediaStream, onClose, onCaptured }) {
   const meta = SIDE_META[side] || SIDE_META.front;
 
   const {
@@ -63,31 +41,34 @@ export default function IneCaptureModal({ open, side, mediaStream, onClose, onCa
     analysisCanvasRef,
     status,
     error,
-    guide,
     stableProgress,
     statusMessage,
     captureManual,
     retryPlay,
   } = useIneCaptureEngine({
     side,
-    enabled: open && Boolean(mediaStream),
+    enabled: Boolean(mediaStream),
     mediaStream,
     onCaptured,
   });
-
-  if (!open) return null;
 
   const scanning = status === 'scanning' || status === 'requesting';
   const waitingStream = !mediaStream;
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-slate-950 text-white"
+      className="ine-capture-modal fixed inset-0 z-[9999] flex flex-col bg-slate-950 text-white overscroll-none touch-none"
+      style={{
+        width: '100vw',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        minHeight: '100dvh',
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ine-capture-title"
     >
-      <header className="relative z-20 flex items-center justify-between gap-3 px-4 py-3 safe-area-top bg-slate-950/90">
+      <header className="relative z-20 shrink-0 flex items-center justify-between gap-3 px-4 py-3 safe-area-top bg-slate-950">
         <div className="min-w-0">
           <h2 id="ine-capture-title" className="text-base font-semibold truncate">
             {meta.title}
@@ -104,7 +85,7 @@ export default function IneCaptureModal({ open, side, mediaStream, onClose, onCa
         </button>
       </header>
 
-      <div ref={containerRef} className="relative flex-1 min-h-0 overflow-hidden bg-black">
+      <div ref={containerRef} className="relative flex-1 min-h-0 w-full overflow-hidden bg-black">
         <video
           ref={videoRef}
           className="absolute inset-0 h-full w-full object-cover bg-black"
@@ -112,26 +93,23 @@ export default function IneCaptureModal({ open, side, mediaStream, onClose, onCa
           muted
           playsInline
         />
-        {waitingStream && (
+        {waitingStream ? (
           <div className="absolute inset-0 z-[15] flex items-center justify-center bg-black text-slate-300 text-sm px-6 text-center">
             Preparando cámara…
           </div>
+        ) : (
+          <GuideOverlay stableProgress={stableProgress} />
         )}
-        <GuideOverlay
-          guide={guide}
-          stableProgress={stableProgress}
-          maskId={`ine-guide-mask-${side}`}
-        />
         <canvas ref={analysisCanvasRef} className="hidden" aria-hidden />
 
-        <div className="absolute inset-x-0 top-3 z-20 flex justify-center px-4">
+        <div className="absolute inset-x-0 top-3 z-20 flex justify-center px-4 pointer-events-none">
           <p className="rounded-full bg-slate-900/75 px-4 py-2 text-sm text-center text-slate-100 backdrop-blur-sm max-w-md">
             {error || statusMessage || meta.hint}
           </p>
         </div>
       </div>
 
-      <footer className="relative z-20 flex flex-col gap-3 px-4 py-4 bg-slate-950/95 border-t border-white/10 safe-area-bottom">
+      <footer className="relative z-20 shrink-0 flex flex-col gap-3 px-4 py-4 bg-slate-950 border-t border-white/10 safe-area-bottom">
         {error ? (
           <button type="button" className="btn-primary w-full" onClick={retryPlay}>
             <IconRefresh size={18} stroke={1.75} className="mr-2 inline" aria-hidden />
@@ -154,5 +132,21 @@ export default function IneCaptureModal({ open, side, mediaStream, onClose, onCa
         </p>
       </footer>
     </div>
+  );
+}
+
+export default function IneCaptureModal({ open, side, mediaStream, onClose, onCaptured }) {
+  useLockBodyScroll(open);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <IneCaptureModalContent
+      side={side}
+      mediaStream={mediaStream}
+      onClose={onClose}
+      onCaptured={onCaptured}
+    />,
+    document.body,
   );
 }
