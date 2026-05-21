@@ -1,5 +1,8 @@
 # Frontend (nginx + build de Vite). HTTPS en 443; puerto 80 redirige a 443.
 #
+# Despliegue (producción, corte breve en 80/443):
+#   /opt/plataforma-ciudadanos/app/plataforma_ciudadanos_frontend/deploy.sh
+#
 # Certificados en el host (p. ej. Let's Encrypt):
 #   SSL_FULLCHAIN_PATH=/etc/letsencrypt/live/tudominio.com/fullchain.pem
 #   SSL_PRIVKEY_PATH=/etc/letsencrypt/live/tudominio.com/privkey.pem
