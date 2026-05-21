@@ -81,7 +81,7 @@ function GoogleMapsMutantLayer({ apiKey }) {
         }
         await loadGoogleMapsScript(apiKey);
         if (cancelled) return;
-        layer = L.gridLayer.googleMutant({ type: 'roadmap' });
+        layer = L.gridLayer.googleMutant({ type: 'roadmap', maxZoom: 21, minZoom: 0 });
         layer.addTo(map);
       } catch {
         if (!cancelled) setFailed(true);
@@ -562,6 +562,8 @@ export default function MapPage() {
         <MapContainer
           center={[19.4326, -99.1332]}
           zoom={11}
+          minZoom={0}
+          maxZoom={21}
           scrollWheelZoom={false}
           style={{ height: '100%', width: '100%' }}
         >
