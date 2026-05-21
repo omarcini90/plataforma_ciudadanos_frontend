@@ -1,11 +1,45 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import { IconCamera, IconCheck, IconUpload } from '@tabler/icons-react';
 import IneCaptureModal from './IneCaptureModal.jsx';
-import { isCameraSupported } from './ineCaptureUtils.js';
+import { isCameraSupported, requestRearCameraStream } from './ineCaptureUtils.js';
+
+function stopStream(stream) {
+  stream?.getTracks?.().forEach((t) => t.stop());
+}
 
 export default function IneCaptureField({ label, file, side, accept, onChange }) {
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
+  const [openingCamera, setOpeningCamera] = useState(false);
+  const streamRef = useRef(null);
   const cameraOk = isCameraSupported();
+
+  const closeCapture = () => {
+    stopStream(streamRef.current);
+    streamRef.current = null;
+    setMediaStream(null);
+    setCaptureOpen(false);
+  };
+
+  const openCapture = async () => {
+    setOpeningCamera(true);
+    try {
+      stopStream(streamRef.current);
+      const stream = await requestRearCameraStream();
+      streamRef.current = stream;
+      setMediaStream(stream);
+      setCaptureOpen(true);
+    } catch (err) {
+      const msg =
+        err?.name === 'NotAllowedError'
+          ? 'Permite el acceso a la cámara en Ajustes del navegador.'
+          : err?.message || 'No se pudo abrir la cámara';
+      toast.error(msg);
+    } finally {
+      setOpeningCamera(false);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 space-y-3">
@@ -37,10 +71,11 @@ export default function IneCaptureField({ label, file, side, accept, onChange })
           <button
             type="button"
             className="btn-primary flex-1 inline-flex items-center justify-center gap-2 touch-manipulation"
-            onClick={() => setCaptureOpen(true)}
+            disabled={openingCamera}
+            onClick={openCapture}
           >
             <IconCamera size={18} stroke={1.75} aria-hidden />
-            Capturar con cámara
+            {openingCamera ? 'Abriendo cámara…' : 'Capturar con cámara'}
           </button>
         )}
         <label className="btn-secondary flex-1 inline-flex items-center justify-center gap-2 cursor-pointer touch-manipulation">
@@ -64,8 +99,12 @@ export default function IneCaptureField({ label, file, side, accept, onChange })
       <IneCaptureModal
         open={captureOpen}
         side={side}
-        onClose={() => setCaptureOpen(false)}
-        onCaptured={(f) => onChange(f)}
+        mediaStream={mediaStream}
+        onClose={closeCapture}
+        onCaptured={(f) => {
+          onChange(f);
+          closeCapture();
+        }}
       />
     </div>
   );

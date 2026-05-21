@@ -54,7 +54,7 @@ function GuideOverlay({ guide, stableProgress, maskId }) {
   );
 }
 
-export default function IneCaptureModal({ open, side, onClose, onCaptured }) {
+export default function IneCaptureModal({ open, side, mediaStream, onClose, onCaptured }) {
   const meta = SIDE_META[side] || SIDE_META.front;
 
   const {
@@ -67,19 +67,18 @@ export default function IneCaptureModal({ open, side, onClose, onCaptured }) {
     stableProgress,
     statusMessage,
     captureManual,
-    retry,
+    retryPlay,
   } = useIneCaptureEngine({
     side,
-    enabled: open,
-    onCaptured: (file) => {
-      onCaptured(file);
-      onClose();
-    },
+    enabled: open && Boolean(mediaStream),
+    mediaStream,
+    onCaptured,
   });
 
   if (!open) return null;
 
   const scanning = status === 'scanning' || status === 'requesting';
+  const waitingStream = !mediaStream;
 
   return (
     <div
@@ -108,11 +107,16 @@ export default function IneCaptureModal({ open, side, onClose, onCaptured }) {
       <div ref={containerRef} className="relative flex-1 min-h-0 overflow-hidden bg-black">
         <video
           ref={videoRef}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover bg-black"
           autoPlay
           muted
           playsInline
         />
+        {waitingStream && (
+          <div className="absolute inset-0 z-[15] flex items-center justify-center bg-black text-slate-300 text-sm px-6 text-center">
+            Preparando cámara…
+          </div>
+        )}
         <GuideOverlay
           guide={guide}
           stableProgress={stableProgress}
@@ -129,9 +133,9 @@ export default function IneCaptureModal({ open, side, onClose, onCaptured }) {
 
       <footer className="relative z-20 flex flex-col gap-3 px-4 py-4 bg-slate-950/95 border-t border-white/10 safe-area-bottom">
         {error ? (
-          <button type="button" className="btn-primary w-full" onClick={retry}>
+          <button type="button" className="btn-primary w-full" onClick={retryPlay}>
             <IconRefresh size={18} stroke={1.75} className="mr-2 inline" aria-hidden />
-            Reintentar cámara
+            Reintentar vista previa
           </button>
         ) : (
           <button

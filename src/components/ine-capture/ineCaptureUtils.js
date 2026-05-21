@@ -176,3 +176,59 @@ export function isCameraSupported() {
     typeof document !== 'undefined'
   );
 }
+
+/** iOS/Safari: getUserMedia debe llamarse en el gesto del usuario, no en useEffect. */
+export async function requestRearCameraStream() {
+  const attempts = [
+    { audio: false, video: { facingMode: { ideal: 'environment' } } },
+    { audio: false, video: { facingMode: 'environment' } },
+    { audio: false, video: true },
+  ];
+  let lastError;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('No se pudo acceder a la cámara');
+}
+
+export function waitForVideoReady(video, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    if (video.readyState >= 1 && video.videoWidth > 0) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(
+      () => reject(new Error('La cámara tardó demasiado en mostrar imagen')),
+      timeoutMs,
+    );
+    const done = () => {
+      clearTimeout(timer);
+      video.removeEventListener('loadedmetadata', done);
+      video.removeEventListener('loadeddata', done);
+      if (video.videoWidth > 0) resolve();
+    };
+    video.addEventListener('loadedmetadata', done);
+    video.addEventListener('loadeddata', done);
+  });
+}
+
+export async function bindStreamToVideo(video, stream) {
+  video.setAttribute('playsinline', 'true');
+  video.setAttribute('webkit-playsinline', 'true');
+  video.muted = true;
+  video.autoplay = true;
+  video.srcObject = stream;
+  await waitForVideoReady(video);
+  try {
+    await video.play();
+  } catch (err) {
+    if (err?.name === 'NotAllowedError') {
+      throw new Error('Toca la pantalla para iniciar la vista previa de la cámara');
+    }
+    throw err;
+  }
+}

@@ -5,20 +5,23 @@ import {
 } from './ineCaptureConstants.js';
 import {
   analyzeGuideFrame,
+  bindStreamToVideo,
   blobToIneFile,
   cropVideoFrame,
   getGuideRect,
 } from './ineCaptureUtils.js';
 
-export function useIneCaptureEngine({ side, onCaptured, enabled }) {
+export function useIneCaptureEngine({ side, onCaptured, enabled, mediaStream }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const streamRef = useRef(null);
+  const ownsStreamRef = useRef(false);
   const loopRef = useRef(null);
   const prevSamplesRef = useRef(null);
   const stableCountRef = useRef(0);
   const capturingRef = useRef(false);
+  const bindGenerationRef = useRef(0);
 
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
@@ -27,15 +30,16 @@ export function useIneCaptureEngine({ side, onCaptured, enabled }) {
   const [stableProgress, setStableProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const stopCamera = useCallback(() => {
+  const stopCamera = useCallback((stopTracks = true) => {
     if (loopRef.current) {
       clearInterval(loopRef.current);
       loopRef.current = null;
     }
-    if (streamRef.current) {
+    if (stopTracks && streamRef.current && ownsStreamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
     }
+    streamRef.current = null;
+    ownsStreamRef.current = false;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -61,7 +65,7 @@ export function useIneCaptureEngine({ side, onCaptured, enabled }) {
         height: rect.height,
       });
       const file = blobToIneFile(blob, side);
-      stopCamera();
+      stopCamera(false);
       setStatus('captured');
       onCaptured?.(file);
     } catch (err) {
@@ -94,10 +98,7 @@ export function useIneCaptureEngine({ side, onCaptured, enabled }) {
 
       if (result.ready) {
         stableCountRef.current += 1;
-        const progress = Math.min(
-          1,
-          stableCountRef.current / STABLE_FRAMES_REQUIRED,
-        );
+        const progress = Math.min(1, stableCountRef.current / STABLE_FRAMES_REQUIRED);
         setStableProgress(progress);
         setStatusMessage('Mantén estable…');
         if (stableCountRef.current >= STABLE_FRAMES_REQUIRED) {
@@ -121,57 +122,94 @@ export function useIneCaptureEngine({ side, onCaptured, enabled }) {
     }, ANALYSIS_INTERVAL_MS);
   }, [performCapture]);
 
-  const startCamera = useCallback(async () => {
-    setError('');
-    setStatus('requesting');
-    setStatusMessage('Activando cámara…');
-    stopCamera();
+  const bindStream = useCallback(
+    async (stream) => {
+      const generation = ++bindGenerationRef.current;
+      setError('');
+      setStatus('requesting');
+      setStatusMessage('Iniciando vista previa…');
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
-      streamRef.current = stream;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
       const video = videoRef.current;
-      if (!video) throw new Error('Visor de cámara no disponible');
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('webkit-playsinline', 'true');
-      video.muted = true;
-      video.srcObject = stream;
-      await video.play();
+      if (!video) {
+        throw new Error('Visor de cámara no disponible');
+      }
+
+      streamRef.current = stream;
+      await bindStreamToVideo(video, stream);
+
+      if (generation !== bindGenerationRef.current) return;
+
       setStatus('scanning');
       setStatusMessage('Coloca la credencial dentro del marco');
       startAnalysisLoop();
-    } catch (err) {
-      const msg =
-        err?.name === 'NotAllowedError'
-          ? 'Permite el acceso a la cámara en tu navegador.'
-          : err?.message || 'No se pudo abrir la cámara';
-      setError(msg);
-      setStatus('error');
-      stopCamera();
-    }
-  }, [startAnalysisLoop, stopCamera]);
+    },
+    [startAnalysisLoop],
+  );
 
   useEffect(() => {
-    if (enabled) {
-      startCamera();
-    } else {
-      stopCamera();
+    if (!enabled) {
+      bindGenerationRef.current += 1;
+      stopCamera(false);
       setStatus('idle');
+      setStatusMessage('');
+      return undefined;
     }
-    return () => stopCamera();
-  }, [enabled, startCamera, stopCamera]);
+
+    if (!mediaStream) {
+      setStatus('waiting');
+      setStatusMessage('Sin flujo de cámara');
+      return undefined;
+    }
+
+    let cancelled = false;
+    ownsStreamRef.current = false;
+
+    (async () => {
+      try {
+        await bindStream(mediaStream);
+      } catch (err) {
+        if (cancelled) return;
+        const msg =
+          err?.name === 'NotAllowedError'
+            ? 'Permite el acceso a la cámara en tu navegador.'
+            : err?.message || 'No se pudo iniciar la cámara';
+        setError(msg);
+        setStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      bindGenerationRef.current += 1;
+      if (loopRef.current) {
+        clearInterval(loopRef.current);
+        loopRef.current = null;
+      }
+    };
+  }, [enabled, mediaStream, bindStream, stopCamera]);
 
   const captureManual = useCallback(() => {
     stableCountRef.current = STABLE_FRAMES_REQUIRED;
     performCapture();
   }, [performCapture]);
+
+  const retryPlay = useCallback(async () => {
+    const video = videoRef.current;
+    const stream = streamRef.current || mediaStream;
+    if (!video || !stream) return;
+    try {
+      setError('');
+      await bindStreamToVideo(video, stream);
+      setStatus('scanning');
+      setStatusMessage('Coloca la credencial dentro del marco');
+      startAnalysisLoop();
+    } catch (err) {
+      setError(err?.message || 'No se pudo reproducir la cámara');
+      setStatus('error');
+    }
+  }, [mediaStream, startAnalysisLoop]);
 
   return {
     videoRef,
@@ -184,6 +222,6 @@ export function useIneCaptureEngine({ side, onCaptured, enabled }) {
     stableProgress,
     statusMessage,
     captureManual,
-    retry: startCamera,
+    retryPlay,
   };
 }
