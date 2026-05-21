@@ -164,35 +164,30 @@ export default function CitizenFormPage() {
 
     setGeoLoading(true);
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=mx&addressdetails=1`;
-      const res = await fetch(url, {
-        headers: { 'Accept-Language': 'es' },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error('Error de Nominatim');
-      const results = await res.json();
-      if (!results.length) {
-        if (!silent) toast.error('No se encontraron coordenadas para esa dirección.');
-        return;
-      }
-      const { lat, lon, display_name } = results[0];
+      const { formatted_address, latitud, longitud } = await geoApi.geocode(query);
       setData((d) => ({
         ...d,
         address: {
           ...d.address,
-          latitud: parseFloat(lat).toFixed(7),
-          longitud: parseFloat(lon).toFixed(7),
+          latitud: Number(latitud).toFixed(7),
+          longitud: Number(longitud).toFixed(7),
         },
       }));
       manualCoordsRef.current = false;
+      const label = formatted_address || query;
       if (silent) {
-        toast.success(`Ubicación detectada: ${display_name}`, { id: 'geo-auto', duration: 2500 });
+        toast.success(`Ubicación detectada: ${label}`, { id: 'geo-auto', duration: 2500 });
       } else {
-        toast.success(`Coordenadas obtenidas: ${display_name}`);
+        toast.success(`Coordenadas obtenidas: ${label}`);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
-      if (!silent) toast.error('No se pudo geolocalizar la dirección.');
+      const detail = err?.response?.data?.detail;
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : 'No se pudo geolocalizar la dirección. Verifica GOOGLE_MAPS_API_KEY y Geocoding API.';
+      if (!silent) toast.error(msg);
     } finally {
       setGeoLoading(false);
     }

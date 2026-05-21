@@ -108,13 +108,15 @@ export const mapsApi = {
   programMarkers: (params) => api.get('/maps/program-markers', { params }).then((r) => r.data),
 };
 
-/** Autocompletado de direcciones vía backend (Google Places; clave en servidor). */
+/** Google Places y Geocoding vía backend (clave en servidor). */
 export const geoApi = {
   googleMapsReady: () => api.get('/geo/google-maps-ready').then((r) => r.data),
   googleAutocomplete: (input) =>
     api.get('/geo/places/autocomplete', { params: { input } }).then((r) => r.data),
   googlePlaceDetails: (place_id) =>
     api.get('/geo/places/details', { params: { place_id } }).then((r) => r.data),
+  geocode: (address) =>
+    api.get('/geo/geocode', { params: { address } }).then((r) => r.data),
 };
 
 export const logsApi = {
