@@ -18,12 +18,107 @@ import {
 import { catalogsApi } from '../api/index.js';
 
 const TABS = [
-  { id: 'STATUS', label: 'Estatus', Icon: IconLayoutList },
-  { id: 'AREAS', label: 'Áreas y servicios', Icon: IconBuildingCommunity },
-  { id: 'COLONIAS', label: 'Colonias', Icon: IconHome },
-  { id: 'SECCIONES', label: 'Secciones', Icon: IconFlag },
-  { id: 'TERRITORIALES', label: 'Territoriales', Icon: IconMap2 },
+  { id: 'STATUS', label: 'Estatus', shortLabel: 'Estatus', Icon: IconLayoutList },
+  { id: 'AREAS', label: 'Áreas y servicios', shortLabel: 'Áreas', Icon: IconBuildingCommunity },
+  { id: 'COLONIAS', label: 'Colonias', shortLabel: 'Colonias', Icon: IconHome },
+  { id: 'SECCIONES', label: 'Secciones', shortLabel: 'Secciones', Icon: IconFlag },
+  { id: 'TERRITORIALES', label: 'Territoriales', shortLabel: 'Territoriales', Icon: IconMap2 },
 ];
+
+function CatalogTabButton({ t, active, onSelect, variant }) {
+  if (variant === 'vertical') {
+    return (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active}
+        aria-controls={`catalog-panel-${t.id}`}
+        id={`catalog-tab-${t.id}`}
+        onClick={() => onSelect(t.id)}
+        className={`flex flex-col items-center gap-1 w-full px-1.5 py-2.5 text-[10px] font-medium text-center border-l-2 transition touch-manipulation ${
+          active
+            ? 'border-brand-700 bg-white text-brand-800 shadow-sm'
+            : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-700'
+        }`}
+      >
+        <t.Icon
+          size={18}
+          stroke={active ? 2 : 1.75}
+          className={`shrink-0 ${active ? 'text-brand-700' : 'text-slate-400'}`}
+          aria-hidden
+        />
+        <span className="leading-tight">{t.shortLabel}</span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      aria-controls={`catalog-panel-${t.id}`}
+      id={`catalog-tab-${t.id}`}
+      onClick={() => onSelect(t.id)}
+      className={`relative inline-flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition ${
+        active
+          ? 'border-brand-700 text-brand-800'
+          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200'
+      }`}
+    >
+      <t.Icon
+        size={18}
+        stroke={active ? 2 : 1.75}
+        className={active ? 'text-brand-700' : 'text-slate-400'}
+        aria-hidden
+      />
+      {t.label}
+    </button>
+  );
+}
+
+function CatalogTabsRail({ tab, onTabChange }) {
+  return (
+    <nav
+      className="lg:hidden shrink-0 w-[4.5rem] border-r border-slate-200 bg-slate-50/90 flex flex-col py-1"
+      role="tablist"
+      aria-label="Secciones de catálogos"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
+      {TABS.map((t) => (
+        <CatalogTabButton
+          key={t.id}
+          t={t}
+          active={tab === t.id}
+          onSelect={onTabChange}
+          variant="vertical"
+        />
+      ))}
+    </nav>
+  );
+}
+
+function CatalogTabsBar({ tab, onTabChange }) {
+  return (
+    <nav
+      className="hidden lg:block border-b border-slate-200 bg-white"
+      role="tablist"
+      aria-label="Secciones de catálogos"
+    >
+      <div className="flex flex-wrap gap-x-1">
+        {TABS.map((t) => (
+          <CatalogTabButton
+            key={t.id}
+            t={t}
+            active={tab === t.id}
+            onSelect={onTabChange}
+            variant="horizontal"
+          />
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 const iconBtnBase =
   'inline-flex items-center justify-center rounded-lg p-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none';
@@ -143,35 +238,31 @@ export default function CatalogsPage() {
   const [tab, setTab] = useState('STATUS');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 lg:space-y-6">
       <header>
-        <h2 className="text-2xl font-bold text-slate-800">Catálogos</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Catálogos</h2>
+        <p className="text-sm text-slate-500 mt-0.5 hidden sm:block">
           Alta, edición y baja lógica (desactivar). Los cambios aplican en formularios y servicios.
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              tab === t.id ? 'bg-brand-600 text-white' : 'bg-white ring-1 ring-slate-300 text-slate-700'
-            }`}
-          >
-            <t.Icon size={18} stroke={1.75} className="shrink-0 opacity-90" aria-hidden />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <CatalogTabsBar tab={tab} onTabChange={setTab} />
 
-      {tab === 'STATUS' && <GenericCatalogCrud type="STATUS" />}
-      {tab === 'AREAS' && <OperationalAreasCrud />}
-      {tab === 'COLONIAS' && <ColoniasCrud />}
-      {tab === 'SECCIONES' && <SeccionesCrud />}
-      {tab === 'TERRITORIALES' && <TerritorialesCrud />}
+      <div className="flex items-stretch -mx-4 sm:-mx-6 lg:mx-0 border border-slate-200 lg:border-0 rounded-lg lg:rounded-none overflow-hidden lg:overflow-visible bg-white lg:bg-transparent shadow-sm lg:shadow-none">
+        <CatalogTabsRail tab={tab} onTabChange={setTab} />
+        <div
+          role="tabpanel"
+          id={`catalog-panel-${tab}`}
+          aria-labelledby={`catalog-tab-${tab}`}
+          className="flex-1 min-w-0 p-3 sm:p-4 lg:p-0 lg:pt-0"
+        >
+          {tab === 'STATUS' && <GenericCatalogCrud type="STATUS" />}
+          {tab === 'AREAS' && <OperationalAreasCrud />}
+          {tab === 'COLONIAS' && <ColoniasCrud />}
+          {tab === 'SECCIONES' && <SeccionesCrud />}
+          {tab === 'TERRITORIALES' && <TerritorialesCrud />}
+        </div>
+      </div>
     </div>
   );
 }

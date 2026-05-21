@@ -309,6 +309,15 @@ export default function UsersPage() {
   const iconActionClass =
     'inline-flex items-center justify-center rounded-md p-1.5 ring-1 ring-slate-200 hover:bg-slate-50 transition';
 
+  const clearUserFilters = () => {
+    setUserFilters({ q: '', role_id: '', active: '' });
+  };
+  const hasActiveUserFilters =
+    Boolean(userFilters.q.trim()) || Boolean(userFilters.role_id) || Boolean(userFilters.active);
+
+  const clearRoleFilter = () => setRoleFilter('');
+  const hasActiveRoleFilter = Boolean(roleFilter.trim());
+
   return (
     <div className="space-y-6">
       <header>
@@ -344,48 +353,79 @@ export default function UsersPage() {
       </div>
 
       {tab === 'users' && (
-        <div className="card space-y-4">
-          <div className="flex flex-wrap items-end gap-3 justify-between">
-            <div className="flex flex-wrap gap-2">
-              <input
-                className="input w-64"
-                placeholder="Buscar nombre, email o usuario"
-                value={userFilters.q}
-                onChange={(e) => setUserFilters((f) => ({ ...f, q: e.target.value }))}
-              />
-              <select
-                className="input w-44"
-                value={userFilters.role_id}
-                onChange={(e) => setUserFilters((f) => ({ ...f, role_id: e.target.value }))}
-              >
-                <option value="">Todos los roles</option>
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="input w-36"
-                value={userFilters.active}
-                onChange={(e) => setUserFilters((f) => ({ ...f, active: e.target.value }))}
-              >
-                <option value="">Todos</option>
-                <option value="1">Activos</option>
-                <option value="0">Inactivos</option>
-              </select>
+        <>
+          <section className="card space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-800">Filtros del listado</h3>
+                <p className="text-sm text-slate-500">
+                  Nombre, correo, usuario de acceso, rol y estado.
+                </p>
+              </div>
+              {hasActiveUserFilters && (
+                <button
+                  type="button"
+                  className="text-sm text-brand-700 hover:underline self-start"
+                  onClick={clearUserFilters}
+                >
+                  Limpiar filtros
+                </button>
+              )}
             </div>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!canManageUsers}
-              onClick={openCreateUser}
-            >
-              Agregar usuario
-            </button>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="label">Buscar</label>
+                <input
+                  className="input"
+                  placeholder="Nombre, email o usuario"
+                  value={userFilters.q}
+                  onChange={(e) => setUserFilters((f) => ({ ...f, q: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Rol</label>
+                <select
+                  className="input"
+                  value={userFilters.role_id}
+                  onChange={(e) => setUserFilters((f) => ({ ...f, role_id: e.target.value }))}
+                >
+                  <option value="">Todos</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Estado</label>
+                <select
+                  className="input"
+                  value={userFilters.active}
+                  onChange={(e) => setUserFilters((f) => ({ ...f, active: e.target.value }))}
+                >
+                  <option value="">Todos</option>
+                  <option value="1">Activos</option>
+                  <option value="0">Inactivos</option>
+                </select>
+              </div>
+            </div>
+          </section>
 
-          <div className="overflow-x-auto">
+          <section className="card space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="font-semibold text-slate-800">Usuarios</h3>
+              <button
+                type="button"
+                className="btn-primary shrink-0 self-start"
+                disabled={!canManageUsers}
+                onClick={openCreateUser}
+              >
+                Agregar usuario
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-slate-600 border-b">
                 <tr>
@@ -444,27 +484,57 @@ export default function UsersPage() {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
+            </div>
+          </section>
+        </>
       )}
 
       {tab === 'roles' && (
-        <div className="card space-y-4">
-          <div className="flex flex-wrap items-end gap-3 justify-between">
-            <input
-              className="input w-72"
-              placeholder="Buscar rol por nombre o descripción"
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-            />
-            {canManageRoles && (
-              <button type="button" className="btn-primary" onClick={openCreateRole}>
-                Agregar rol
-              </button>
-            )}
-          </div>
+        <>
+          <section className="card space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-800">Filtros del listado</h3>
+                <p className="text-sm text-slate-500">Nombre o descripción del rol.</p>
+              </div>
+              {hasActiveRoleFilter && (
+                <button
+                  type="button"
+                  className="text-sm text-brand-700 hover:underline self-start"
+                  onClick={clearRoleFilter}
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="sm:col-span-2 lg:col-span-1">
+                <label className="label">Buscar</label>
+                <input
+                  className="input"
+                  placeholder="Nombre o descripción del rol"
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                />
+              </div>
+            </div>
+          </section>
 
-          <div className="overflow-x-auto">
+          <section className="card space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="font-semibold text-slate-800">Roles</h3>
+              {canManageRoles && (
+                <button
+                  type="button"
+                  className="btn-primary shrink-0 self-start"
+                  onClick={openCreateRole}
+                >
+                  Agregar rol
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-slate-600 border-b">
                 <tr>
@@ -524,8 +594,9 @@ export default function UsersPage() {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
+            </div>
+          </section>
+        </>
       )}
 
       <Drawer

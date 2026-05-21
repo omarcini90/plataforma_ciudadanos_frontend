@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Drawer } from 'antd';
+import SlidePanel from '../components/SlidePanel.jsx';
 import { GeoJSON, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -626,18 +626,15 @@ export default function MapPage() {
         </MapContainer>
       </div>
 
-      <Drawer
-        closable
-        destroyOnHidden
-        title={<p className="m-0">Ficha del ciudadano</p>}
-        placement="right"
-        width={760}
+      <SlidePanel
         open={Boolean(selectedCitizenId)}
-        loading={citizenDetailQuery.isPending}
-        styles={{ body: { overflow: 'hidden' } }}
+        title="Ficha del ciudadano"
+        placement="right"
+        width="max-w-3xl"
+        className="!max-h-[100dvh]"
         onClose={() => setSelectedCitizenId(null)}
       >
-        <section className="flex h-full flex-col gap-6 overflow-hidden">
+        <section className="flex flex-col gap-6">
           {selectedCitizenId && (
             <>
             {citizenDetailQuery.isPending ? (
@@ -831,7 +828,7 @@ export default function MapPage() {
             </>
           )}
         </section>
-      </Drawer>
+      </SlidePanel>
     </div>
   );
 }
