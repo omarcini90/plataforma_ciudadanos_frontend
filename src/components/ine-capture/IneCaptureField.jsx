@@ -8,7 +8,12 @@ function stopStream(stream) {
   stream?.getTracks?.().forEach((t) => t.stop());
 }
 
-export default function IneCaptureField({ label, file, side, accept, onChange }) {
+/** Sin `image/*` para que en iOS no aparezca «Tomar foto» al subir archivo (solo galería/archivos). */
+const INE_GALLERY_ACCEPT =
+  'application/pdf,.pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,.jpg,.jpeg,.png';
+
+export default function IneCaptureField({ label, file, side, onChange }) {
+  const fileInputRef = useRef(null);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [mediaStream, setMediaStream] = useState(null);
   const [openingCamera, setOpeningCamera] = useState(false);
@@ -63,14 +68,17 @@ export default function IneCaptureField({ label, file, side, accept, onChange })
           </button>
         </div>
       ) : (
-        <p className="text-xs text-slate-500">Sin imagen. Usa la cámara o sube un archivo.</p>
+        <>
+          <p className="text-xs text-slate-500 lg:hidden">Sin imagen. Usa la cámara o sube un archivo.</p>
+          <p className="text-xs text-slate-500 hidden lg:block">Sin imagen. Sube un archivo.</p>
+        </>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col sm:flex-row lg:block gap-2">
         {cameraOk && (
           <button
             type="button"
-            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 touch-manipulation"
+            className="btn-primary flex-1 inline-flex items-center justify-center gap-2 touch-manipulation lg:hidden"
             disabled={openingCamera}
             onClick={openCapture}
           >
@@ -78,20 +86,28 @@ export default function IneCaptureField({ label, file, side, accept, onChange })
             {openingCamera ? 'Abriendo cámara…' : 'Capturar con cámara'}
           </button>
         )}
-        <label className="btn-secondary flex-1 inline-flex items-center justify-center gap-2 cursor-pointer touch-manipulation">
+        <button
+          type="button"
+          className="btn-secondary lg:btn-primary flex-1 w-full inline-flex items-center justify-center gap-2 touch-manipulation"
+          onClick={() => fileInputRef.current?.click()}
+        >
           <IconUpload size={18} stroke={1.75} aria-hidden />
           Subir archivo
-          <input
-            type="file"
-            accept={accept}
-            className="sr-only"
-            onChange={(e) => onChange(e.target.files?.[0] || null)}
-          />
-        </label>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={INE_GALLERY_ACCEPT}
+          className="sr-only"
+          onChange={(e) => {
+            onChange(e.target.files?.[0] || null);
+            e.target.value = '';
+          }}
+        />
       </div>
 
       {!cameraOk && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-amber-700 lg:hidden">
           La cámara no está disponible en este navegador. Usa «Subir archivo».
         </p>
       )}

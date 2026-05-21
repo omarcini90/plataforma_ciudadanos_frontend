@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -42,6 +42,40 @@ function emptyToNull(v) {
   if (v == null) return null;
   if (typeof v === 'string' && v.trim() === '') return null;
   return v;
+}
+
+function formatApiDetail(detail, fallback = 'Error desconocido') {
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item?.msg) return item.msg;
+        if (item?.message) return item.message;
+        return JSON.stringify(item);
+      })
+      .join(' · ');
+  }
+  if (typeof detail === 'object') {
+    const parts = [];
+    if (detail.message) parts.push(String(detail.message));
+    const qualityErrors = detail.quality?.errors;
+    if (Array.isArray(qualityErrors) && qualityErrors.length) {
+      parts.push(
+        qualityErrors
+          .map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))
+          .join(' · '),
+      );
+    }
+    if (parts.length) return parts.join(' — ');
+  }
+  return fallback;
+}
+
+function buildIneFingerprint(front, back) {
+  if (!front || !back) return '';
+  return `${front.name}:${front.size}:${front.lastModified}|${back.name}:${back.size}:${back.lastModified}`;
 }
 
 function Field({ label, k, type = 'text', addr, data, set, setAddr, readOnly, ...rest }) {
@@ -89,6 +123,7 @@ export default function CitizenFormPage() {
   const [ineFront, setIneFront] = useState(null);
   const [ineBack, setIneBack] = useState(null);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrSuccess, setOcrSuccess] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isActive, setIsActive] = useState(true);
@@ -102,10 +137,15 @@ export default function CitizenFormPage() {
   const manualCoordsRef = useRef(false);
   const lastQueryRef = useRef('');
   const abortRef = useRef(null);
+  const ocrFingerprintRef = useRef('');
 
   const handleFileSelected = (file, side) => {
-    const setter = side === 'front' ? setIneFront : setIneBack;
-    setter(file || null);
+    if (side === 'front') setIneFront(file || null);
+    else setIneBack(file || null);
+    if (!file) {
+      ocrFingerprintRef.current = '';
+      setOcrSuccess(false);
+    }
   };
 
   const set = (k, v) => setData((d) => ({ ...d, [k]: v }));
@@ -155,11 +195,8 @@ export default function CitizenFormPage() {
         },
       }));
       manualCoordsRef.current = false;
-      const label = formatted_address || query;
-      if (silent) {
-        toast.success(`Ubicación detectada: ${label}`, { id: 'geo-auto', duration: 2500 });
-      } else {
-        toast.success(`Coordenadas obtenidas: ${label}`);
+      if (!silent) {
+        toast.success(`Coordenadas obtenidas: ${formatted_address || query}`);
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -303,11 +340,15 @@ export default function CitizenFormPage() {
     data.address.codigo_postal,
   ]);
 
-  const runOCR = async () => {
-    if (!ineFront || !ineBack) {
-      return toast.error('Sube el frente y el reverso de la INE para extraer datos.');
-    }
+  const runOCR = useCallback(async () => {
+    if (!ineFront || !ineBack) return;
+
+    const fingerprint = buildIneFingerprint(ineFront, ineBack);
+    ocrFingerprintRef.current = fingerprint;
+
     setOcrLoading(true);
+    setOcrSuccess(false);
+    const errors = [];
     try {
       const [frontSettled, backSettled] = await Promise.allSettled([
         citizensApi.ocr(ineFront, 'INE_FRONT', { force: true }),
@@ -318,21 +359,29 @@ export default function CitizenFormPage() {
       const backRes = backSettled.status === 'fulfilled' ? backSettled.value : null;
 
       if (frontSettled.status === 'rejected') {
-        const detail = frontSettled.reason?.response?.data?.detail;
-        toast.error(
-          typeof detail === 'string' ? `Frente: ${detail}` : 'No se pudo procesar el frente de la INE.',
-          { duration: 6000 },
+        errors.push(
+          `Frente: ${formatApiDetail(
+            frontSettled.reason?.response?.data?.detail,
+            'No se pudo procesar el frente de la INE',
+          )}`,
         );
       }
       if (backSettled.status === 'rejected') {
-        const detail = backSettled.reason?.response?.data?.detail;
-        toast.error(
-          typeof detail === 'string' ? `Reverso: ${detail}` : 'No se pudo procesar el reverso de la INE.',
-          { duration: 6000 },
+        errors.push(
+          `Reverso: ${formatApiDetail(
+            backSettled.reason?.response?.data?.detail,
+            'No se pudo procesar el reverso de la INE',
+          )}`,
         );
       }
 
       if (!frontRes && !backRes) {
+        toast.error(
+          errors.length
+            ? errors.join('\n')
+            : 'No se pudo procesar la INE. Intenta de nuevo con imágenes más nítidas.',
+          { duration: 8000 },
+        );
         return;
       }
 
@@ -381,27 +430,54 @@ export default function CitizenFormPage() {
       }));
 
       if (hasAddress) {
-        // Si la INE trae dirección, dejamos que la auto-geolocalización vuelva
-        // a correr (el efecto de geocodeAddress está atado a estos campos).
         manualCoordsRef.current = false;
       }
 
-      const sources = [];
-      if (frontRes) sources.push('frente');
-      if (backRes) sources.push('reverso');
       const detectedCount = Object.values(detected).filter(Boolean).length;
-
       if (detectedCount === 0) {
-        toast.error('OCR ejecutado pero no se reconocieron campos.', { duration: 6000 });
-      } else {
-        toast.success(
-          `Datos extraídos (${sources.join(' + ')}) · ${detectedCount} campo${detectedCount === 1 ? '' : 's'}.`,
-        );
+        errors.push('No se reconocieron datos en los documentos.');
       }
+
+      if (errors.length) {
+        toast.error(errors.join('\n'), { duration: 8000 });
+        return;
+      }
+
+      setOcrSuccess(true);
+      toast.success('Los datos se han procesado correctamente.');
+    } catch (err) {
+      toast.error(
+        formatApiDetail(err?.response?.data?.detail, err?.message || 'Error al procesar la INE'),
+        { duration: 8000 },
+      );
     } finally {
       setOcrLoading(false);
     }
+  }, [ineFront, ineBack]);
+
+  useEffect(() => {
+    if (!ineFront || !ineBack || ocrLoading) return undefined;
+
+    const fingerprint = buildIneFingerprint(ineFront, ineBack);
+    if (fingerprint === ocrFingerprintRef.current) return undefined;
+
+    const timer = setTimeout(() => {
+      runOCR();
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [ineFront, ineBack, ocrLoading, runOCR]);
+
+  const retryOCR = () => {
+    ocrFingerprintRef.current = '';
+    setOcrSuccess(false);
+    runOCR();
   };
+
+  const bothIneReady = Boolean(ineFront && ineBack);
+  /** Creación: tras OCR exitoso. Edición: si no está reemplazando la INE (sin archivos nuevos). */
+  const showDetailsAfterOcr =
+    ocrSuccess || (isEdit && existingCitizen && !bothIneReady);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -485,8 +561,14 @@ export default function CitizenFormPage() {
         <section className="card">
           <h3 className="font-semibold text-slate-800 mb-1">Paso 1 · INE / OCR</h3>
           <p className="text-sm text-slate-500 mb-4">
-            Captura el frente y el reverso con la cámara (guía automática) o sube archivo. El OCR usa
-            el backend existente (Mindee).
+            <span className="lg:hidden">
+              Captura o sube el frente y el reverso; al tener ambos se extraen los datos
+              automáticamente.
+            </span>
+            <span className="hidden lg:inline">
+              Sube el frente y el reverso de la INE; al tener ambos se extraen los datos
+              automáticamente.
+            </span>
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -494,36 +576,41 @@ export default function CitizenFormPage() {
               label="Frente de la INE"
               side="front"
               file={ineFront}
-              accept="image/*,application/pdf,.pdf"
               onChange={(f) => handleFileSelected(f, 'front')}
             />
             <IneCaptureField
               label="Reverso de la INE"
               side="back"
               file={ineBack}
-              accept="image/*,application/pdf,.pdf"
               onChange={(f) => handleFileSelected(f, 'back')}
             />
           </div>
 
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={runOCR}
-              className="btn-secondary"
-              disabled={ocrLoading || !ineFront || !ineBack}
-            >
-              {ocrLoading ? 'Procesando OCR…' : 'Extraer datos por OCR'}
-            </button>
-          </div>
-
-          <p className="text-xs text-slate-500 mt-2">
-            Debes tener <strong>ambos</strong> lados. El OCR combina nombre y clave del frente con
-            CURP/MRZ del reverso.
-            {isEdit ? ' En edición puedes omitir la INE si solo actualizas datos manuales.' : ''}
-          </p>
+          {bothIneReady && (
+            <div className="mt-4">
+              {ocrLoading ? (
+                <p className="text-sm text-brand-800 inline-flex items-center gap-2">
+                  <span
+                    className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"
+                    aria-hidden
+                  />
+                  Extrayendo datos de la INE…
+                </p>
+              ) : ocrSuccess ? (
+                <p className="text-sm text-emerald-700">
+                  Datos extraídos. Revisa el formulario y corrige si hace falta.
+                </p>
+              ) : (
+                <button type="button" className="btn-secondary" onClick={retryOCR}>
+                  Reintentar extracción OCR
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
+        {showDetailsAfterOcr && (
+          <>
         <section className="card">
           <h3 className="font-semibold text-slate-800 mb-3">Datos personales</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -704,6 +791,8 @@ export default function CitizenFormPage() {
             {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar ciudadano'}
           </button>
         </div>
+          </>
+        )}
       </form>
     </div>
   );
