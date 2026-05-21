@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { citizensApi, geoApi } from '../../api/index.js';
+import IneCaptureField from '../../components/ine-capture/IneCaptureField.jsx';
 
 /** Solo `true` / `1` / `yes` (insensible a mayúsculas) habilitan la UI; por defecto deshabilitado. */
 function isGoogleMapsUiEnabled() {
@@ -55,26 +56,6 @@ function Field({ label, k, type = 'text', addr, data, set, setAddr, readOnly, ..
         onChange={(e) => (addr ? setAddr(k, e.target.value) : set(k, e.target.value))}
         {...rest}
       />
-    </div>
-  );
-}
-
-function IneUploadField({ label, file, accept, onChange }) {
-  return (
-    <div>
-      <label className="label">{label}</label>
-      <input
-        type="file"
-        accept={accept}
-        onChange={(e) => onChange(e.target.files?.[0] || null)}
-        className="block w-full text-sm"
-      />
-      {file && (
-        <p className="mt-1 text-xs text-slate-600 truncate">
-          <strong>{file.name}</strong>
-          {file.size ? ` · ${Math.round(file.size / 1024)} KB` : ''}
-        </p>
-      )}
     </div>
   );
 }
@@ -502,17 +483,23 @@ export default function CitizenFormPage() {
 
       <form onSubmit={onSubmit} className="space-y-6">
         <section className="card">
-          <h3 className="font-semibold text-slate-800 mb-3">Paso 1 · INE / OCR</h3>
+          <h3 className="font-semibold text-slate-800 mb-1">Paso 1 · INE / OCR</h3>
+          <p className="text-sm text-slate-500 mb-4">
+            Captura el frente y el reverso con la cámara (guía automática) o sube archivo. El OCR usa
+            el backend existente (Mindee).
+          </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <IneUploadField
-              label="Frontal de la INE (imagen o PDF)"
+            <IneCaptureField
+              label="Frente de la INE"
+              side="front"
               file={ineFront}
               accept="image/*,application/pdf,.pdf"
               onChange={(f) => handleFileSelected(f, 'front')}
             />
-            <IneUploadField
-              label="Reverso de la INE (imagen o PDF)"
+            <IneCaptureField
+              label="Reverso de la INE"
+              side="back"
               file={ineBack}
               accept="image/*,application/pdf,.pdf"
               onChange={(f) => handleFileSelected(f, 'back')}
@@ -531,8 +518,8 @@ export default function CitizenFormPage() {
           </div>
 
           <p className="text-xs text-slate-500 mt-2">
-            Debes subir <strong>ambos</strong> lados de la INE. El OCR solo se ejecuta cuando están el
-            frente y el reverso; combina nombre y clave del frente con CURP/MRZ del reverso.
+            Debes tener <strong>ambos</strong> lados. El OCR combina nombre y clave del frente con
+            CURP/MRZ del reverso.
             {isEdit ? ' En edición puedes omitir la INE si solo actualizas datos manuales.' : ''}
           </p>
         </section>
