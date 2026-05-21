@@ -1,0 +1,26 @@
+# Frontend (nginx + build de Vite). Las VITE_* se inyectan en tiempo de build.
+#
+# Uso:
+#   cp .env.production.example .env
+#   docker compose up -d --build
+#
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Define VITE_API_URL en .env}
+        VITE_UPLOADS_URL: ${VITE_UPLOADS_URL:?Define VITE_UPLOADS_URL en .env}
+        VITE_GOOGLE_MAPS_ENABLED: ${VITE_GOOGLE_MAPS_ENABLED:-false}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    container_name: plataforma-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONT_PUBLISH_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
