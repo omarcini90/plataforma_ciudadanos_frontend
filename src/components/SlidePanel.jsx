@@ -1,5 +1,9 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconX } from '@tabler/icons-react';
+
+/** Por encima de Leaflet (popups ~700) y del menú móvil (z-50). */
+const PANEL_Z = 'z-[1100]';
 
 /**
  * Panel lateral sin Ant Design (compatible con iOS Safari).
@@ -35,8 +39,8 @@ export default function SlidePanel({
       ? 'left-0 border-r border-slate-200'
       : 'right-0 border-l border-slate-200';
 
-  return (
-    <div className="fixed inset-0 z-50" role="presentation">
+  return createPortal(
+    <div className={`fixed inset-0 ${PANEL_Z}`} role="presentation">
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40 cursor-default"
@@ -63,6 +67,7 @@ export default function SlidePanel({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">{children}</div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
