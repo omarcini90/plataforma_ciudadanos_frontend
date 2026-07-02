@@ -217,6 +217,43 @@ function FitBoundsToSectionsEnvelope({ geoJson, enabled, boundsTrigger }) {
   return null;
 }
 
+/** Acordeón simple para agrupar filtros del mapa sin amontonar la UI. */
+function MapFilterAccordion({ title, hint, defaultOpen = false, badge, children }) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group rounded-lg border border-slate-200 bg-white shadow-sm open:shadow-none"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          <span className="font-medium text-slate-800">{title}</span>
+          {hint ? <p className="text-xs text-slate-500 mt-0.5">{hint}</p> : null}
+        </div>
+        <span className="flex shrink-0 items-center gap-2 text-slate-400">
+          {badge ? (
+            <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-800">
+              {badge}
+            </span>
+          ) : null}
+          <svg
+            className="h-4 w-4 transition-transform group-open:rotate-180"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>
+      </summary>
+      <div className="border-t border-slate-100 px-4 py-3">{children}</div>
+    </details>
+  );
+}
+
 export default function MapPage() {
   const { basemapMode, googleKey } = useMapBasemapConfig();
 
@@ -228,6 +265,8 @@ export default function MapPage() {
     operational_area_id: '',
     operational_area_offering_id: '',
     priority: '',
+    program_id: '',
+    support_type_id: '',
   });
   const [debouncedCurp, setDebouncedCurp] = useState('');
   useEffect(() => {
@@ -310,14 +349,44 @@ export default function MapPage() {
     queryFn: () => mapsApi.serviceMarkers(markerParams),
   });
 
+  const { data: supportPrograms = [] } = useQuery({
+    queryKey: ['supports', 'programs'],
+    queryFn: () => supportsApi.programs(),
+    staleTime: 120_000,
+  });
+
+  const { data: supportTypes = [] } = useQuery({
+    queryKey: ['supports', 'types'],
+    queryFn: () => supportsApi.types(),
+    staleTime: 120_000,
+  });
+
+  const filterProgramIdNum = mapFilters.program_id ? Number(mapFilters.program_id) : null;
+  const filterSupportTypeIdNum = mapFilters.support_type_id
+    ? Number(mapFilters.support_type_id)
+    : null;
+
+  const programTypesFiltered = useMemo(() => {
+    if (!filterProgramIdNum) return supportTypes;
+    return supportTypes.filter((t) => t.program_id === filterProgramIdNum);
+  }, [supportTypes, filterProgramIdNum]);
+
   const programMarkerParams = useMemo(() => {
     const p = { limit: 5000 };
     if (debouncedCurp) p.curp = debouncedCurp;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
     return p;
-  }, [debouncedCurp, debouncedSeccion, mapFilters.municipio]);
+  }, [
+    debouncedCurp,
+    debouncedSeccion,
+    mapFilters.municipio,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
+  ]);
 
   const programsMapQuery = useQuery({
     queryKey: ['map-program-markers', programMarkerParams],
@@ -343,18 +412,6 @@ export default function MapPage() {
     enabled: Boolean(selectedCitizenId),
   });
 
-  const { data: supportPrograms = [] } = useQuery({
-    queryKey: ['supports', 'programs'],
-    queryFn: () => supportsApi.programs(),
-    staleTime: 120_000,
-  });
-
-  const { data: supportTypes = [] } = useQuery({
-    queryKey: ['supports', 'types'],
-    queryFn: () => supportsApi.types(),
-    staleTime: 120_000,
-  });
-
   const programById = useMemo(() => {
     const m = new Map();
     supportPrograms.forEach((p) => m.set(p.id, p));
@@ -375,7 +432,21 @@ export default function MapPage() {
     Boolean(mapFilters.seccion_electoral.trim()) ||
     Boolean(filterAreaIdNum) ||
     Boolean(mapFilters.operational_area_offering_id) ||
-    Boolean(mapFilters.priority);
+    Boolean(mapFilters.priority) ||
+    Boolean(filterProgramIdNum) ||
+    Boolean(filterSupportTypeIdNum);
+
+  const locationFilterCount =
+    Number(Boolean(debouncedCurp || mapFilters.curp.trim())) +
+    Number(Boolean(mapFilters.municipio.trim())) +
+    Number(Boolean(debouncedSeccion || mapFilters.seccion_electoral.trim()));
+  const serviceFilterCount =
+    Number(Boolean(mapFilters.status_code)) +
+    Number(Boolean(filterAreaIdNum)) +
+    Number(Boolean(mapFilters.operational_area_offering_id)) +
+    Number(Boolean(mapFilters.priority));
+  const programFilterCount =
+    Number(Boolean(filterProgramIdNum)) + Number(Boolean(filterSupportTypeIdNum));
 
   const clearMapFilters = () => {
     setMapFilters({
@@ -386,6 +457,8 @@ export default function MapPage() {
       operational_area_id: '',
       operational_area_offering_id: '',
       priority: '',
+      program_id: '',
+      support_type_id: '',
     });
     setDebouncedCurp('');
     setDebouncedSeccion('');
@@ -444,7 +517,7 @@ export default function MapPage() {
               ? `${serviceMarkers.length} servicios en domicilio geolocalizado`
               : 'Capa de servicios oculta'}
             {showPrograms
-              ? ` · ${mapProgramMarkers.length} apoyos/programas geolocalizados`
+              ? ` · ${mapProgramMarkers.length} ciudadanos con programas geolocalizados`
               : ' · capa de programas oculta'}
             {showSectionPolygons
               ? sectionFilter
@@ -491,8 +564,8 @@ export default function MapPage() {
           <div>
             <h3 className="font-semibold text-slate-800">Filtros del mapa</h3>
             <p className="text-sm text-slate-500">
-              CURP, estatus, municipio, sección electoral, área, catálogo y prioridad. Escribe el número
-              de sección para filtrar y encuadrar su polígono.
+              Usa los acordeones para filtrar servicios, programas y ubicación. Escribe el número de
+              sección para encuadrar su polígono.
             </p>
           </div>
           {hasActiveFilters && (
@@ -501,124 +574,193 @@ export default function MapPage() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          <div>
-            <label className="label">CURP</label>
-            <input
-              className="input"
-              placeholder="Coincidencia parcial"
-              value={mapFilters.curp}
-              onChange={(e) => setMapFilters((f) => ({ ...f, curp: e.target.value }))}
-              autoCapitalize="characters"
-            />
-          </div>
-          <div>
-            <label className="label">Estatus</label>
-            <select
-              className="input"
-              value={mapFilters.status_code}
-              onChange={(e) => setMapFilters((f) => ({ ...f, status_code: e.target.value }))}
-            >
-              {STATUSES.map((s) => (
-                <option key={s || 'all'} value={s}>
-                  {s || 'Todos'}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Municipio</label>
-            <input
-              className="input"
-              placeholder="Domicilio principal"
-              value={mapFilters.municipio}
-              onChange={(e) => setMapFilters((f) => ({ ...f, municipio: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="map-filter-seccion">
-              Sección electoral
-            </label>
-            <input
-              id="map-filter-seccion"
-              className="input"
-              list="map-secciones-datalist"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="5463"
-              value={mapFilters.seccion_electoral}
-              onChange={(e) =>
-                setMapFilters((f) => ({
-                  ...f,
-                  seccion_electoral: e.target.value.replace(/\D/g, ''),
-                }))
-              }
-            />
-            <datalist id="map-secciones-datalist">
-              {seccionesSorted.map((s) => (
-                <option key={s.id} value={String(s.id)} />
-              ))}
-            </datalist>
-            {sectionInputPending ? (
-              <p className="mt-1 text-xs text-slate-400">Filtrando…</p>
-            ) : sectionInputUnknown ? (
-              <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
-            ) : null}
-          </div>
-          <div>
-            <label className="label">Área operativa</label>
-            <select
-              className="input"
-              value={mapFilters.operational_area_id}
-              onChange={(e) =>
-                setMapFilters((f) => ({
-                  ...f,
-                  operational_area_id: e.target.value,
-                  operational_area_offering_id: '',
-                }))
-              }
-            >
-              <option value="">Todas</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Servicio (catálogo)</label>
-            <select
-              className="input"
-              value={mapFilters.operational_area_offering_id}
-              disabled={!filterAreaIdNum}
-              onChange={(e) =>
-                setMapFilters((f) => ({ ...f, operational_area_offering_id: e.target.value }))
-              }
-            >
-              <option value="">Todos en el área</option>
-              {filterOfferings.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Prioridad</label>
-            <select
-              className="input"
-              value={mapFilters.priority}
-              onChange={(e) => setMapFilters((f) => ({ ...f, priority: e.target.value }))}
-            >
-              <option value="">Todas</option>
-              {PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
+
+        <div className="space-y-2">
+          <MapFilterAccordion
+            title="Ubicación y ciudadano"
+            hint="Municipio, sección electoral y CURP"
+            defaultOpen
+            badge={locationFilterCount ? `${locationFilterCount} activo${locationFilterCount === 1 ? '' : 's'}` : null}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="label">CURP</label>
+                <input
+                  className="input"
+                  placeholder="Coincidencia parcial"
+                  value={mapFilters.curp}
+                  onChange={(e) => setMapFilters((f) => ({ ...f, curp: e.target.value }))}
+                  autoCapitalize="characters"
+                />
+              </div>
+              <div>
+                <label className="label">Municipio</label>
+                <input
+                  className="input"
+                  placeholder="Domicilio principal"
+                  value={mapFilters.municipio}
+                  onChange={(e) => setMapFilters((f) => ({ ...f, municipio: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="map-filter-seccion">
+                  Sección electoral
+                </label>
+                <input
+                  id="map-filter-seccion"
+                  className="input"
+                  list="map-secciones-datalist"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="5463"
+                  value={mapFilters.seccion_electoral}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({
+                      ...f,
+                      seccion_electoral: e.target.value.replace(/\D/g, ''),
+                    }))
+                  }
+                />
+                <datalist id="map-secciones-datalist">
+                  {seccionesSorted.map((s) => (
+                    <option key={s.id} value={String(s.id)} />
+                  ))}
+                </datalist>
+                {sectionInputPending ? (
+                  <p className="mt-1 text-xs text-slate-400">Filtrando…</p>
+                ) : sectionInputUnknown ? (
+                  <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
+                ) : null}
+              </div>
+            </div>
+          </MapFilterAccordion>
+
+          <MapFilterAccordion
+            title="Servicios operativos"
+            hint="Estatus, área, catálogo y prioridad"
+            badge={serviceFilterCount ? `${serviceFilterCount} activo${serviceFilterCount === 1 ? '' : 's'}` : null}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="label">Estatus</label>
+                <select
+                  className="input"
+                  value={mapFilters.status_code}
+                  onChange={(e) => setMapFilters((f) => ({ ...f, status_code: e.target.value }))}
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s || 'all'} value={s}>
+                      {s || 'Todos'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Área operativa</label>
+                <select
+                  className="input"
+                  value={mapFilters.operational_area_id}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({
+                      ...f,
+                      operational_area_id: e.target.value,
+                      operational_area_offering_id: '',
+                    }))
+                  }
+                >
+                  <option value="">Todas</option>
+                  {areas.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Servicio (catálogo)</label>
+                <select
+                  className="input"
+                  value={mapFilters.operational_area_offering_id}
+                  disabled={!filterAreaIdNum}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({ ...f, operational_area_offering_id: e.target.value }))
+                  }
+                >
+                  <option value="">Todos en el área</option>
+                  {filterOfferings.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Prioridad</label>
+                <select
+                  className="input"
+                  value={mapFilters.priority}
+                  onChange={(e) => setMapFilters((f) => ({ ...f, priority: e.target.value }))}
+                >
+                  <option value="">Todas</option>
+                  {PRIORITY_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </MapFilterAccordion>
+
+          <MapFilterAccordion
+            title="Programas y apoyos"
+            hint="Filtra la capa morada del mapa por programa o tipo de apoyo"
+            badge={programFilterCount ? `${programFilterCount} activo${programFilterCount === 1 ? '' : 's'}` : null}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Programa</label>
+                <select
+                  className="input"
+                  value={mapFilters.program_id}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({
+                      ...f,
+                      program_id: e.target.value,
+                      support_type_id: '',
+                    }))
+                  }
+                >
+                  <option value="">Todos los programas</option>
+                  {supportPrograms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Tipo de apoyo</label>
+                <select
+                  className="input"
+                  value={mapFilters.support_type_id}
+                  disabled={!programTypesFiltered.length}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({ ...f, support_type_id: e.target.value }))
+                  }
+                >
+                  <option value="">
+                    {filterProgramIdNum ? 'Todos en el programa' : 'Todos los tipos'}
+                  </option>
+                  {programTypesFiltered.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </MapFilterAccordion>
         </div>
       </section>
 
@@ -705,7 +847,7 @@ export default function MapPage() {
             <MarkerClusterGroup chunkedLoading>
               {mapProgramMarkers.map((m) => (
                 <Marker
-                  key={`prog-${m.support_id}`}
+                  key={`prog-citizen-${m.citizen_id}`}
                   position={[Number(m.latitud), Number(m.longitud)]}
                   icon={buildProgramMarkerIcon()}
                   eventHandlers={{
