@@ -13,6 +13,22 @@ body {
   color: theme('colors.slate.800');
 }
 
+/* Móvil: sin zoom por gestos; inputs ≥16px evitan zoom automático de iOS al enfocar */
+@media (max-width: 1023px) {
+  html.mobile-no-zoom,
+  html.mobile-no-zoom body {
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html.mobile-no-zoom .input,
+  html.mobile-no-zoom input,
+  html.mobile-no-zoom select,
+  html.mobile-no-zoom textarea {
+    font-size: 16px;
+  }
+}
+
 .safe-area-top {
   padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
 }
