@@ -224,6 +224,7 @@ export default function MapPage() {
     curp: '',
     status_code: '',
     municipio: '',
+    seccion_electoral: '',
     operational_area_id: '',
     operational_area_offering_id: '',
     priority: '',
@@ -233,6 +234,12 @@ export default function MapPage() {
     const id = setTimeout(() => setDebouncedCurp(mapFilters.curp.trim()), 350);
     return () => clearTimeout(id);
   }, [mapFilters.curp]);
+
+  const [debouncedSeccion, setDebouncedSeccion] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSeccion(mapFilters.seccion_electoral.trim()), 350);
+    return () => clearTimeout(id);
+  }, [mapFilters.seccion_electoral]);
 
   const [showSections, setShowSections] = useState(true);
   const [showServices, setShowServices] = useState(true);
@@ -254,6 +261,22 @@ export default function MapPage() {
     queryFn: () => catalogsApi.areas(),
   });
 
+  const { data: secciones = [] } = useQuery({
+    queryKey: ['catalogs', 'secciones'],
+    queryFn: () => catalogsApi.secciones(),
+    staleTime: 120_000,
+  });
+
+  const seccionesSorted = useMemo(
+    () => [...secciones].sort((a, b) => a.id - b.id),
+    [secciones],
+  );
+
+  const seccionIdSet = useMemo(
+    () => new Set(seccionesSorted.map((s) => String(s.id))),
+    [seccionesSorted],
+  );
+
   const { data: filterOfferings = [] } = useQuery({
     queryKey: ['catalogs', 'area-offerings-map', filterAreaIdNum],
     queryFn: () => catalogsApi.areaOfferings(filterAreaIdNum),
@@ -270,9 +293,11 @@ export default function MapPage() {
     if (mapFilters.operational_area_offering_id)
       p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
     if (mapFilters.priority) p.priority = mapFilters.priority;
+    if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
     return p;
   }, [
     debouncedCurp,
+    debouncedSeccion,
     mapFilters.status_code,
     mapFilters.municipio,
     mapFilters.operational_area_offering_id,
@@ -290,8 +315,9 @@ export default function MapPage() {
     if (debouncedCurp) p.curp = debouncedCurp;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
     return p;
-  }, [debouncedCurp, mapFilters.municipio]);
+  }, [debouncedCurp, debouncedSeccion, mapFilters.municipio]);
 
   const programsMapQuery = useQuery({
     queryKey: ['map-program-markers', programMarkerParams],
@@ -345,6 +371,8 @@ export default function MapPage() {
     Boolean(debouncedCurp) ||
     Boolean(mapFilters.status_code) ||
     Boolean(mapFilters.municipio.trim()) ||
+    Boolean(debouncedSeccion) ||
+    Boolean(mapFilters.seccion_electoral.trim()) ||
     Boolean(filterAreaIdNum) ||
     Boolean(mapFilters.operational_area_offering_id) ||
     Boolean(mapFilters.priority);
@@ -354,11 +382,13 @@ export default function MapPage() {
       curp: '',
       status_code: '',
       municipio: '',
+      seccion_electoral: '',
       operational_area_id: '',
       operational_area_offering_id: '',
       priority: '',
     });
     setDebouncedCurp('');
+    setDebouncedSeccion('');
   };
 
   const serviceMarkers = useMemo(() => servicesQuery.data?.markers ?? [], [servicesQuery.data]);
@@ -367,12 +397,39 @@ export default function MapPage() {
     [programsMapQuery.data],
   );
   const sectionsGeo = sectionsQuery.data;
+  const sectionInput = mapFilters.seccion_electoral.trim();
+  const sectionFilter = debouncedSeccion;
+  const sectionFilterNum = sectionFilter ? Number(sectionFilter) : null;
+  const sectionInputPending = Boolean(sectionInput) && sectionInput !== sectionFilter;
+
+  const visibleSectionsGeo = useMemo(() => {
+    if (!sectionsGeo?.features?.length) return sectionsGeo;
+    if (!sectionFilter) return sectionsGeo;
+
+    const features = sectionsGeo.features.filter((f) => {
+      const p = f.properties || {};
+      return (
+        String(p.code ?? '') === sectionFilter ||
+        p.seccion_id === sectionFilterNum ||
+        p.id_seccion === sectionFilterNum
+      );
+    });
+
+    return { ...sectionsGeo, features };
+  }, [sectionsGeo, sectionFilter, sectionFilterNum]);
+
   const sectionCount = sectionsGeo?.features?.length ?? 0;
+  const visibleSectionCount = visibleSectionsGeo?.features?.length ?? 0;
+  const sectionInputUnknown =
+    Boolean(sectionFilter) && !seccionIdSet.has(sectionFilter) && visibleSectionCount === 0;
+  const showSectionPolygons =
+    Boolean(sectionFilter) || (showSections && visibleSectionCount > 0);
 
   const geoJsonKey = useMemo(() => {
-    if (!sectionsGeo?.features?.length) return 'empty';
-    return `sections-${sectionCount}-${sectionsGeo.features[0]?.properties?.code ?? ''}`;
-  }, [sectionsGeo, sectionCount]);
+    if (!visibleSectionsGeo?.features?.length) return 'empty';
+    const firstCode = visibleSectionsGeo.features[0]?.properties?.code ?? '';
+    return `sections-${sectionFilter || 'all'}-${visibleSectionCount}-${firstCode}`;
+  }, [visibleSectionsGeo, visibleSectionCount, sectionFilter]);
 
   /** Cuando cambian los datos de secciones (refetch o geometrías distintas), se recalcula el encuadre. */
   const boundsTrigger = `${geoJsonKey}:${sectionsQuery.dataUpdatedAt ?? 0}`;
@@ -389,7 +446,11 @@ export default function MapPage() {
             {showPrograms
               ? ` · ${mapProgramMarkers.length} apoyos/programas geolocalizados`
               : ' · capa de programas oculta'}
-            {showSections ? ` · ${sectionCount} polígonos de sección` : ''}
+            {showSectionPolygons
+              ? sectionFilter
+                ? ` · sección ${sectionFilter}${visibleSectionCount ? '' : ' (sin polígono)'}`
+                : ` · ${sectionCount} polígonos de sección`
+              : ''}
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end">
@@ -430,7 +491,8 @@ export default function MapPage() {
           <div>
             <h3 className="font-semibold text-slate-800">Filtros del mapa</h3>
             <p className="text-sm text-slate-500">
-              Mismos criterios que en Servicios: CURP, estatus, municipio, área, catálogo y prioridad.
+              CURP, estatus, municipio, sección electoral, área, catálogo y prioridad. Escribe el número
+              de sección para filtrar y encuadrar su polígono.
             </p>
           </div>
           {hasActiveFilters && (
@@ -439,7 +501,7 @@ export default function MapPage() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <div>
             <label className="label">CURP</label>
             <input
@@ -472,6 +534,36 @@ export default function MapPage() {
               value={mapFilters.municipio}
               onChange={(e) => setMapFilters((f) => ({ ...f, municipio: e.target.value }))}
             />
+          </div>
+          <div>
+            <label className="label" htmlFor="map-filter-seccion">
+              Sección electoral
+            </label>
+            <input
+              id="map-filter-seccion"
+              className="input"
+              list="map-secciones-datalist"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="5463"
+              value={mapFilters.seccion_electoral}
+              onChange={(e) =>
+                setMapFilters((f) => ({
+                  ...f,
+                  seccion_electoral: e.target.value.replace(/\D/g, ''),
+                }))
+              }
+            />
+            <datalist id="map-secciones-datalist">
+              {seccionesSorted.map((s) => (
+                <option key={s.id} value={String(s.id)} />
+              ))}
+            </datalist>
+            {sectionInputPending ? (
+              <p className="mt-1 text-xs text-slate-400">Filtrando…</p>
+            ) : sectionInputUnknown ? (
+              <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
+            ) : null}
           </div>
           <div>
             <label className="label">Área operativa</label>
@@ -568,8 +660,8 @@ export default function MapPage() {
           style={{ height: '100%', width: '100%' }}
         >
           <FitBoundsToSectionsEnvelope
-            geoJson={sectionsGeo}
-            enabled={showSections && sectionCount > 0}
+            geoJson={visibleSectionsGeo}
+            enabled={showSectionPolygons && visibleSectionCount > 0}
             boundsTrigger={boundsTrigger}
           />
           {basemapMode === 'google-js' ? (
@@ -582,10 +674,10 @@ export default function MapPage() {
               maxZoom={20}
             />
           )}
-          {showSections && sectionCount > 0 && (
+          {showSectionPolygons && visibleSectionCount > 0 && (
             <GeoJSON
               key={geoJsonKey}
-              data={sectionsGeo}
+              data={visibleSectionsGeo}
               style={() => SECTION_STYLE}
               onEachFeature={(feature, layer) => {
                 const p = feature.properties || {};
