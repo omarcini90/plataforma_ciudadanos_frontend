@@ -23,7 +23,7 @@ const navItems = [
   { to: '/map', label: 'Mapa', icon: IconMap2, permissions: ['map.view'] },
   { to: '/surveys', label: 'Encuestas', icon: IconNotebook, permissions: ['surveys.read'] },
   { to: '/catalogs', label: 'Catálogos', icon: IconBook2, permissions: ['catalogs.read'] },
-  { to: '/logs', label: 'Bitácora', icon: IconChecklist, permissions: ['roles.read'] },
+  { to: '/logs', label: 'Bitácora', icon: IconChecklist, permissions: ['logs.read'] },
   { to: '/users', label: 'Usuarios', icon: IconUserShield, permissions: ['users.read'] },
 ];
 

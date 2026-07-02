@@ -115,7 +115,7 @@ export default function AppRoutes() {
         <Route
           path="logs"
           element={
-            <ProtectedRoute permissions={['roles.read']}>
+            <ProtectedRoute permissions={['logs.read']}>
               <LogsPage />
             </ProtectedRoute>
           }
