@@ -15,6 +15,8 @@ import SupportsPage from '../pages/Supports.jsx';
 import MapPage from '../pages/MapView.jsx';
 import SurveysPage from '../pages/Surveys.jsx';
 import LogsPage from '../pages/Logs.jsx';
+import Voting2021Page from '../pages/votings/Voting2021Page.jsx';
+import Voting2024Page from '../pages/votings/Voting2024Page.jsx';
 
 export default function AppRoutes() {
   return (
@@ -117,6 +119,22 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute permissions={['logs.read']}>
               <LogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="votings/2021"
+          element={
+            <ProtectedRoute permissions={['votings.read.2021']}>
+              <Voting2021Page />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="votings/2024"
+          element={
+            <ProtectedRoute permissions={['votings.read.2024']}>
+              <Voting2024Page />
             </ProtectedRoute>
           }
         />

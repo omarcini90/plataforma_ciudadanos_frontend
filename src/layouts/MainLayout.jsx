@@ -4,6 +4,8 @@ import {
   IconBook2,
   IconChartBar,
   IconChecklist,
+  IconCheckbox,
+  IconChevronDown,
   IconGift,
   IconMap2,
   IconMenu2,
@@ -22,39 +24,135 @@ const navItems = [
   { to: '/supports', label: 'Apoyos', icon: IconGift, permissions: ['supports.read'] },
   { to: '/map', label: 'Mapa', icon: IconMap2, permissions: ['map.view'] },
   { to: '/surveys', label: 'Encuestas', icon: IconNotebook, permissions: ['surveys.read'] },
+  {
+    label: 'Votaciones',
+    icon: IconCheckbox,
+    permissionsAny: ['votings.read.2021', 'votings.read.2024'],
+    children: [
+      { to: '/votings/2021', label: 'Ejercicio 2021', permissions: ['votings.read.2021'] },
+      { to: '/votings/2024', label: 'Ejercicio 2024', permissions: ['votings.read.2024'] },
+    ],
+  },
   { to: '/catalogs', label: 'Catálogos', icon: IconBook2, permissions: ['catalogs.read'] },
   { to: '/logs', label: 'Bitácora', icon: IconChecklist, permissions: ['logs.read'] },
   { to: '/users', label: 'Usuarios', icon: IconUserShield, permissions: ['users.read'] },
 ];
 
 function filterNavItems(items, hasPermission, hasRole) {
-  return items.filter((i) => {
-    if (i.permissions?.length && !hasPermission(...i.permissions)) return false;
-    if (i.roles?.length && !hasRole(...i.roles)) return false;
-    return true;
-  });
+  return items
+    .map((item) => {
+      if (item.children?.length) {
+        const children = item.children.filter((child) => {
+          if (child.permissions?.length && !hasPermission(...child.permissions)) return false;
+          if (child.roles?.length && !hasRole(...child.roles)) return false;
+          return true;
+        });
+        if (!children.length) return null;
+        if (item.permissionsAny?.length && !item.permissionsAny.some((p) => hasPermission(p))) return null;
+        if (item.permissions?.length && !hasPermission(...item.permissions)) return null;
+        if (item.roles?.length && !hasRole(...item.roles)) return null;
+        return { ...item, children };
+      }
+      if (item.permissions?.length && !hasPermission(...item.permissions)) return null;
+      if (item.roles?.length && !hasRole(...item.roles)) return null;
+      return item;
+    })
+    .filter(Boolean);
 }
 
-function NavLinks({ items, onNavigate }) {
+function flatNavLabels(items) {
+  const out = [];
+  for (const item of items) {
+    if (item.to) out.push(item);
+    if (item.children) out.push(...item.children);
+  }
+  return out;
+}
+
+function NavLinks({ items, onNavigate, pathname }) {
+  const [openGroups, setOpenGroups] = useState({});
+
+  useEffect(() => {
+    const next = {};
+    for (const item of items) {
+      if (item.children?.some((c) => pathname.startsWith(c.to))) {
+        next[item.label] = true;
+      }
+    }
+    setOpenGroups((prev) => ({ ...prev, ...next }));
+  }, [pathname, items]);
+
+  const toggleGroup = (label) => {
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
   return (
     <>
-      {items.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition border-l-2 touch-manipulation ${
-              isActive
-                ? 'bg-brand-700 text-white border-accent-500'
-                : 'border-transparent text-cream-100/80 hover:bg-brand-800 hover:text-white hover:border-accent-400/60 active:bg-brand-800'
-            }`
-          }
-        >
-          <item.icon size={18} stroke={1.9} aria-hidden />
-          <span>{item.label}</span>
-        </NavLink>
-      ))}
+      {items.map((item) => {
+        if (item.children?.length) {
+          const isOpen = openGroups[item.label];
+          const groupActive = item.children.some((c) => pathname.startsWith(c.to));
+          return (
+            <div key={item.label} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleGroup(item.label)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition border-l-2 touch-manipulation ${
+                  groupActive
+                    ? 'bg-brand-800/80 text-white border-accent-500'
+                    : 'border-transparent text-cream-100/80 hover:bg-brand-800 hover:text-white hover:border-accent-400/60'
+                }`}
+              >
+                <item.icon size={18} stroke={1.9} aria-hidden />
+                <span className="flex-1 text-left">{item.label}</span>
+                <IconChevronDown
+                  size={16}
+                  className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+              </button>
+              {isOpen && (
+                <div className="ml-3 pl-3 border-l border-brand-700/60 space-y-1">
+                  {item.children.map((child) => (
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      onClick={onNavigate}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition border-l-2 touch-manipulation ${
+                          isActive
+                            ? 'bg-brand-700 text-white border-accent-500'
+                            : 'border-transparent text-cream-100/75 hover:bg-brand-800 hover:text-white hover:border-accent-400/60'
+                        }`
+                      }
+                    >
+                      <span>{child.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition border-l-2 touch-manipulation ${
+                isActive
+                  ? 'bg-brand-700 text-white border-accent-500'
+                  : 'border-transparent text-cream-100/80 hover:bg-brand-800 hover:text-white hover:border-accent-400/60 active:bg-brand-800'
+              }`
+            }
+          >
+            <item.icon size={18} stroke={1.9} aria-hidden />
+            <span>{item.label}</span>
+          </NavLink>
+        );
+      })}
     </>
   );
 }
@@ -75,6 +173,7 @@ export default function MainLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const visibleNav = filterNavItems(navItems, hasPermission, hasRole);
+  const flatNav = flatNavLabels(visibleNav);
 
   const handleLogout = () => {
     setMenuOpen(false);
@@ -108,7 +207,7 @@ export default function MainLayout() {
       <aside className="hidden lg:flex w-64 shrink-0 bg-brand-900 text-cream-50 flex-col">
         <SidebarBrand />
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <NavLinks items={visibleNav} />
+          <NavLinks items={visibleNav} pathname={location.pathname} />
         </nav>
       </aside>
 
@@ -130,10 +229,7 @@ export default function MainLayout() {
           >
             <SidebarBrand />
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain">
-              <NavLinks
-                items={visibleNav}
-                onNavigate={closeMenu}
-              />
+              <NavLinks items={visibleNav} onNavigate={closeMenu} pathname={location.pathname} />
             </nav>
           </aside>
         </div>
@@ -154,7 +250,7 @@ export default function MainLayout() {
               </button>
               <div className="lg:hidden min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">
-                  {visibleNav.find((i) => location.pathname.startsWith(i.to))?.label || 'Plataforma'}
+                  {flatNav.find((i) => location.pathname.startsWith(i.to))?.label || 'Plataforma'}
                 </p>
                 <p className="text-xs text-slate-500 truncate">Gestión Ciudadana</p>
               </div>

@@ -122,3 +122,17 @@ export const geoApi = {
 export const logsApi = {
   list: (params) => api.get('/logs', { params }).then((r) => r.data),
 };
+
+export const votingsApi = {
+  sectionsGeoJson: () => api.get('/votings/sections/geojson').then((r) => r.data),
+  sections2021: (params) => api.get('/votings/2021/sections', { params }).then((r) => r.data),
+  mapSections2021: () => api.get('/votings/2021/map-sections').then((r) => r.data),
+  summary2021: () => api.get('/votings/2021/summary').then((r) => r.data),
+  coordinaciones2021: () => api.get('/votings/2021/coordinaciones').then((r) => r.data),
+  sections2024: (params) => api.get('/votings/2024/sections', { params }).then((r) => r.data),
+  mapSections2024: () => api.get('/votings/2024/map-sections').then((r) => r.data),
+  casillasBySection2024: (seccionId) =>
+    api.get(`/votings/2024/sections/${seccionId}/casillas`).then((r) => r.data),
+  summary2024: () => api.get('/votings/2024/summary').then((r) => r.data),
+  coordinaciones2024: () => api.get('/votings/2024/coordinaciones').then((r) => r.data),
+};

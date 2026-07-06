@@ -347,6 +347,7 @@ export default function MapPage() {
   const servicesQuery = useQuery({
     queryKey: ['map-service-markers', markerParams],
     queryFn: () => mapsApi.serviceMarkers(markerParams),
+    enabled: showServices,
   });
 
   const { data: supportPrograms = [] } = useQuery({
@@ -637,7 +638,7 @@ export default function MapPage() {
 
           <MapFilterAccordion
             title="Servicios operativos"
-            hint="Estatus, área, catálogo y prioridad"
+            hint="Estatus, área D. SOCIAL, catálogo (p. ej. POSADA) y prioridad — capa de marcadores circulares"
             badge={serviceFilterCount ? `${serviceFilterCount} activo${serviceFilterCount === 1 ? '' : 's'}` : null}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
