@@ -5,7 +5,7 @@ export default function Voting2024Page() {
     <VotingMapPage
       year={2024}
       title="Ejercicio 2024"
-      subtitle="Mapa por sección: verde/rojo según margen PAN-PRI-PRD vs MORENA (PVEM-PT-MORENA)."
+      subtitle="Mapa por sección: verde/rojo según margen NOSOTROS vs ELLOS (PVEM-PT-MORENA vs PAN-PRI-PRD)."
     />
   );
 }
