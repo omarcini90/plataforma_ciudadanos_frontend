@@ -481,14 +481,12 @@ export default function SupportsPage() {
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800 align-top">{t.name}</td>
                     <td className="px-3 py-2 align-top">
-                      <span className="inline-flex items-center gap-2 text-xs text-slate-600">
-                        <span
-                          className="inline-block h-3.5 w-3.5 rounded-sm border border-slate-200 shadow-sm"
-                          style={{ background: color }}
-                          title={color}
-                        />
-                        {color}
-                      </span>
+                      <span
+                        className="inline-block h-5 w-5 rounded border border-slate-200 shadow-sm"
+                        style={{ background: color }}
+                        title="Color en el mapa"
+                        aria-label="Color en el mapa"
+                      />
                     </td>
                     <td className="px-3 py-2 align-top text-slate-600 max-w-xs truncate" title={t.description || ''}>
                       {t.description || '—'}
@@ -670,22 +668,14 @@ export default function SupportsPage() {
             </div>
             <div>
               <label className="label">Color en el mapa</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  className="h-10 w-14 cursor-pointer rounded border border-slate-200 bg-white p-1"
-                  value={normalizeHexColor(typeForm.color)}
-                  onChange={(e) => setTypeForm((f) => ({ ...f, color: e.target.value }))}
-                  title="Color del indicador"
-                />
-                <input
-                  className="input font-mono uppercase"
-                  value={typeForm.color}
-                  onChange={(e) => setTypeForm((f) => ({ ...f, color: e.target.value }))}
-                  placeholder="#7c3aed"
-                  maxLength={7}
-                />
-              </div>
+              <input
+                type="color"
+                className="h-10 w-14 cursor-pointer rounded border border-slate-200 bg-white p-1"
+                value={normalizeHexColor(typeForm.color)}
+                onChange={(e) => setTypeForm((f) => ({ ...f, color: e.target.value }))}
+                title="Color del indicador"
+                aria-label="Color en el mapa"
+              />
               <p className="mt-1 text-xs text-slate-500">
                 Este color se usa en los marcadores de apoyos del mapa interactivo.
               </p>
