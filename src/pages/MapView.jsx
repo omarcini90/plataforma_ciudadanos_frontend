@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import CitizenFichaPanel from '../components/CitizenFichaPanel.jsx';
 import SlidePanel from '../components/SlidePanel.jsx';
 import { GeoJSON, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
-import { catalogsApi, citizensApi, mapsApi, servicesApi, supportsApi } from '../api/index.js';
+import { catalogsApi, mapsApi, supportsApi } from '../api/index.js';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -130,31 +131,6 @@ const SECTION_STYLE = {
   fillColor: '#818cf8',
   fillOpacity: 0.18,
 };
-
-const SERVICE_STATUS_BADGE = {
-  PENDIENTE: 'bg-accent-100 text-accent-800',
-  EN_PROCESO: 'bg-blue-100 text-blue-800',
-  ATENDIDO: 'bg-emerald-100 text-emerald-800',
-  RECHAZADO: 'bg-brand-100 text-brand-800',
-};
-
-async function fetchAllServicesForCitizen(citizenId) {
-  const page_size = 100;
-  let page = 1;
-  const items = [];
-  let total = 0;
-  /* eslint-disable no-await-in-loop -- páginas secuenciales según total del backend */
-  for (;;) {
-    const data = await servicesApi.list({ citizen_id: citizenId, page, page_size });
-    items.push(...(data.items ?? []));
-    total = data.total ?? items.length;
-    if (!data.items?.length || data.items.length < page_size) break;
-    page += 1;
-    if (page > 100) break;
-  }
-  /* eslint-enable no-await-in-loop */
-  return { items, total };
-}
 
 const buildIcon = (color = '#753232') =>
   L.divIcon({
@@ -475,36 +451,6 @@ export default function MapPage() {
     queryFn: () => mapsApi.stats(statsParams),
     staleTime: 15_000,
   });
-
-  const citizenDetailQuery = useQuery({
-    queryKey: ['citizen', selectedCitizenId],
-    queryFn: () => citizensApi.get(selectedCitizenId),
-    enabled: Boolean(selectedCitizenId),
-  });
-
-  const citizenServicesQuery = useQuery({
-    queryKey: ['services', 'map-citizen-panel', selectedCitizenId],
-    queryFn: () => fetchAllServicesForCitizen(selectedCitizenId),
-    enabled: Boolean(selectedCitizenId),
-  });
-
-  const citizenSupportsQuery = useQuery({
-    queryKey: ['supports', selectedCitizenId],
-    queryFn: () => supportsApi.byCitizen(selectedCitizenId),
-    enabled: Boolean(selectedCitizenId),
-  });
-
-  const programById = useMemo(() => {
-    const m = new Map();
-    supportPrograms.forEach((p) => m.set(p.id, p));
-    return m;
-  }, [supportPrograms]);
-
-  const typeById = useMemo(() => {
-    const m = new Map();
-    supportTypes.forEach((t) => m.set(t.id, t));
-    return m;
-  }, [supportTypes]);
 
   const hasActiveFilters =
     Boolean(debouncedCurp) ||
@@ -942,135 +888,146 @@ export default function MapPage() {
         </div>
       </section>
 
-      <section className="space-y-3">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="card py-3 px-4">
-            <p className="text-xs text-slate-500">Ciudadanos geolocalizados</p>
-            <p className="text-lg font-semibold text-slate-800">
-              {statsQuery.isPending ? '…' : fmtStat(stats?.citizens)}
-            </p>
+      <MapFilterAccordion
+        title="Resumen estadístico"
+        hint="Totales y desglose territorial → sección → colonia según los filtros activos"
+        defaultOpen={false}
+        badge={
+          statsQuery.isPending
+            ? '…'
+            : `${fmtStat(stats?.citizens)} civ. · ${fmtStat(stats?.services)} svc. · ${fmtStat(stats?.supports)} apoyos`
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+              <p className="text-xs text-slate-500">Ciudadanos geolocalizados</p>
+              <p className="text-lg font-semibold text-slate-800">
+                {statsQuery.isPending ? '…' : fmtStat(stats?.citizens)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+              <p className="text-xs text-slate-500">Servicios</p>
+              <p className="text-lg font-semibold text-slate-800">
+                {statsQuery.isPending ? '…' : fmtStat(stats?.services)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+              <p className="text-xs text-slate-500">Apoyos</p>
+              <p className="text-lg font-semibold text-slate-800">
+                {statsQuery.isPending ? '…' : fmtStat(stats?.supports)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+              <p className="text-xs text-slate-500">Desglose</p>
+              <p className="text-lg font-semibold text-slate-800 capitalize">
+                {statsQuery.isPending ? '…' : groupLevelLabel}
+              </p>
+            </div>
           </div>
-          <div className="card py-3 px-4">
-            <p className="text-xs text-slate-500">Servicios</p>
-            <p className="text-lg font-semibold text-slate-800">
-              {statsQuery.isPending ? '…' : fmtStat(stats?.services)}
-            </p>
-          </div>
-          <div className="card py-3 px-4">
-            <p className="text-xs text-slate-500">Apoyos</p>
-            <p className="text-lg font-semibold text-slate-800">
-              {statsQuery.isPending ? '…' : fmtStat(stats?.supports)}
-            </p>
-          </div>
-          <div className="card py-3 px-4">
-            <p className="text-xs text-slate-500">Desglose</p>
-            <p className="text-lg font-semibold text-slate-800 capitalize">
-              {statsQuery.isPending ? '…' : groupLevelLabel}
-            </p>
-          </div>
-        </div>
 
-        {(stats?.by_status?.length > 0 || stats?.by_program?.length > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {stats?.by_status?.length > 0 && (
-              <div className="card overflow-hidden p-0">
-                <div className="border-b border-slate-100 px-4 py-2">
-                  <h4 className="text-sm font-semibold text-slate-700">Servicios por estatus</h4>
+          {(stats?.by_status?.length > 0 || stats?.by_program?.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {stats?.by_status?.length > 0 && (
+                <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="border-b border-slate-100 px-4 py-2">
+                    <h4 className="text-sm font-semibold text-slate-700">Servicios por estatus</h4>
+                  </div>
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {stats.by_status.map((row) => (
+                      <li key={row.status_code} className="flex items-center justify-between gap-3 px-4 py-2">
+                        <span className="inline-flex items-center gap-2 text-slate-700">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ background: STATUS_HEX[row.status_code] || '#753232' }}
+                          />
+                          {String(row.status_code).replace(/_/g, ' ')}
+                        </span>
+                        <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {stats.by_status.map((row) => (
-                    <li key={row.status_code} className="flex items-center justify-between gap-3 px-4 py-2">
-                      <span className="inline-flex items-center gap-2 text-slate-700">
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{ background: STATUS_HEX[row.status_code] || '#753232' }}
-                        />
-                        {String(row.status_code).replace(/_/g, ' ')}
-                      </span>
-                      <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {stats?.by_program?.length > 0 && (
-              <div className="card overflow-hidden p-0">
-                <div className="border-b border-slate-100 px-4 py-2">
-                  <h4 className="text-sm font-semibold text-slate-700">Apoyos por programa</h4>
+              )}
+              {stats?.by_program?.length > 0 && (
+                <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="border-b border-slate-100 px-4 py-2">
+                    <h4 className="text-sm font-semibold text-slate-700">Apoyos por programa</h4>
+                  </div>
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {stats.by_program.map((row) => (
+                      <li
+                        key={row.program_id ?? row.program_name}
+                        className="flex items-center justify-between gap-3 px-4 py-2"
+                      >
+                        <span className="inline-flex items-center gap-2 min-w-0 text-slate-700">
+                          <span
+                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                            style={{ background: row.color || PROGRAM_MARKER_COLOR }}
+                          />
+                          <span className="truncate">{row.program_name}</span>
+                        </span>
+                        <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {stats.by_program.map((row) => (
-                    <li
-                      key={row.program_id ?? row.program_name}
-                      className="flex items-center justify-between gap-3 px-4 py-2"
-                    >
-                      <span className="inline-flex items-center gap-2 min-w-0 text-slate-700">
-                        <span
-                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                          style={{ background: row.color || PROGRAM_MARKER_COLOR }}
-                        />
-                        <span className="truncate">{row.program_name}</span>
-                      </span>
-                      <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        <div className="card overflow-hidden p-0">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
-            <h4 className="text-sm font-semibold text-slate-700">
-              Resumen {groupLevelLabel}
-            </h4>
-            <span className="text-xs text-slate-500">
-              {statsQuery.isPending
-                ? 'Calculando…'
-                : `${fmtStat(stats?.groups?.length || 0)} grupo${(stats?.groups?.length || 0) === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          <div className="max-h-56 overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-left text-slate-600 border-b border-slate-200">
-                <tr>
-                  <th className="px-3 py-2 font-medium">
-                    {stats?.group_level === 'colonia'
-                      ? 'Colonia'
-                      : stats?.group_level === 'seccion'
-                        ? 'Sección'
-                        : 'Territorial'}
-                  </th>
-                  <th className="px-3 py-2 font-medium text-right">Ciudadanos</th>
-                  <th className="px-3 py-2 font-medium text-right">Servicios</th>
-                  <th className="px-3 py-2 font-medium text-right">Apoyos</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(stats?.groups ?? []).length ? (
-                  stats.groups.map((g) => (
-                    <tr key={g.key}>
-                      <td className="px-3 py-2 text-slate-800">{g.label}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.citizens)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.services)}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.supports)}</td>
-                    </tr>
-                  ))
-                ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+              <h4 className="text-sm font-semibold text-slate-700">
+                Desglose {groupLevelLabel}
+              </h4>
+              <span className="text-xs text-slate-500">
+                {statsQuery.isPending
+                  ? 'Calculando…'
+                  : `${fmtStat(stats?.groups?.length || 0)} grupo${(stats?.groups?.length || 0) === 1 ? '' : 's'}`}
+              </span>
+            </div>
+            <div className="max-h-56 overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-left text-slate-600 border-b border-slate-200">
                   <tr>
-                    <td className="px-3 py-6 text-center text-slate-500" colSpan={4}>
-                      {statsQuery.isPending
-                        ? 'Cargando resumen…'
-                        : 'Sin datos geolocalizados para el filtro actual.'}
-                    </td>
+                    <th className="px-3 py-2 font-medium">
+                      {stats?.group_level === 'colonia'
+                        ? 'Colonia'
+                        : stats?.group_level === 'seccion'
+                          ? 'Sección'
+                          : 'Territorial'}
+                    </th>
+                    <th className="px-3 py-2 font-medium text-right">Ciudadanos</th>
+                    <th className="px-3 py-2 font-medium text-right">Servicios</th>
+                    <th className="px-3 py-2 font-medium text-right">Apoyos</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(stats?.groups ?? []).length ? (
+                    stats.groups.map((g) => (
+                      <tr key={g.key}>
+                        <td className="px-3 py-2 text-slate-800">{g.label}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.citizens)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.services)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.supports)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="px-3 py-6 text-center text-slate-500" colSpan={4}>
+                        {statsQuery.isPending
+                          ? 'Cargando resumen…'
+                          : 'Sin datos geolocalizados para el filtro actual.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </section>
+      </MapFilterAccordion>
 
       <div className="legend flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         <span className="font-medium text-slate-700">Leyenda estatus:</span>
@@ -1189,200 +1146,13 @@ export default function MapPage() {
         className="!max-h-[100dvh]"
         onClose={() => setSelectedCitizenId(null)}
       >
-        <section className="flex flex-col gap-6">
-          {selectedCitizenId && (
-            <>
-            {citizenDetailQuery.isPending ? (
-              <p className="text-sm text-slate-500">Cargando ciudadano…</p>
-            ) : citizenDetailQuery.isError ? (
-              <p className="text-sm text-red-600">No se pudo cargar el ciudadano.</p>
-            ) : citizenDetailQuery.data ? (
-              <div className="overflow-x-auto">
-                <h4 className="mb-2 text-sm font-semibold text-slate-700">Ciudadano</h4>
-                <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-                  <tbody className="divide-y divide-slate-100">
-                    <tr className="bg-slate-50/80">
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium w-40">Nombre completo</th>
-                      <td className="px-3 py-2 font-medium text-slate-900">
-                        {citizenDetailQuery.data.nombre} {citizenDetailQuery.data.apellido_paterno}{' '}
-                        {citizenDetailQuery.data.apellido_materno || ''}
-                      </td>
-                    </tr>
-                    <tr>
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">CURP</th>
-                      <td className="px-3 py-2 font-mono">{citizenDetailQuery.data.curp}</td>
-                    </tr>
-                    <tr className="bg-slate-50/80">
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Sexo</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.sexo}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Nacimiento</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.fecha_nacimiento || '—'}</td>
-                    </tr>
-                    <tr className="bg-slate-50/80">
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Clave elector</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.clave_elector || '—'}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Sección electoral</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.seccion_electoral || '—'}</td>
-                    </tr>
-                    <tr className="bg-slate-50/80">
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Teléfono</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.telefono || '—'}</td>
-                    </tr>
-                    <tr>
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium">Correo</th>
-                      <td className="px-3 py-2">{citizenDetailQuery.data.correo || '—'}</td>
-                    </tr>
-                    <tr className="bg-slate-50/80">
-                      <th className="text-left px-3 py-2 text-slate-500 font-medium align-top">Domicilio principal</th>
-                      <td className="px-3 py-2">
-                        {(() => {
-                          const addrs = citizenDetailQuery.data.addresses ?? [];
-                          const a = addrs.find((x) => x.is_primary) || addrs[0];
-                          if (!a) return '—';
-                          return (
-                            <>
-                              <span>
-                                {a.calle || ''} {a.numero || ''}, {a.colonia || ''}
-                              </span>
-                              <br />
-                              <span className="text-slate-600">
-                                {a.municipio || ''}, {a.estado || ''} · CP {a.codigo_postal || '—'}
-                              </span>
-                            </>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            <div className="min-h-0 overflow-hidden">
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <h4 className="text-sm font-semibold text-slate-700">Servicios operativos</h4>
-                {citizenServicesQuery.data ? (
-                  <span className="text-xs text-slate-500">
-                    {citizenServicesQuery.data.total} registro{citizenServicesQuery.data.total === 1 ? '' : 's'}
-                  </span>
-                ) : null}
-              </div>
-              {citizenServicesQuery.isPending ? (
-                <p className="text-sm text-slate-500">Cargando servicios…</p>
-              ) : citizenServicesQuery.isError ? (
-                <p className="text-sm text-red-600">No se pudieron cargar los servicios.</p>
-              ) : (
-                <div className="max-h-56 overflow-auto">
-                  <table className="min-w-full text-sm border border-slate-200">
-                    <thead className="text-left text-slate-600 bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Servicio</th>
-                        <th className="px-3 py-2">Catálogo</th>
-                        <th className="px-3 py-2">Prioridad</th>
-                        <th className="px-3 py-2">Estatus</th>
-                        <th className="px-3 py-2">Alta</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(citizenServicesQuery.data?.items ?? []).length ? (
-                        citizenServicesQuery.data.items.map((s) => (
-                          <tr key={s.id}>
-                            <td className="px-3 py-2 text-slate-500 whitespace-nowrap">#{s.id}</td>
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-slate-800">{s.title}</div>
-                              {s.description ? (
-                                <div className="text-xs text-slate-500 line-clamp-2">{s.description}</div>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-2 text-slate-700">
-                              {s.operational_area_offering?.name || '—'}
-                            </td>
-                            <td className="px-3 py-2">{s.priority}</td>
-                            <td className="px-3 py-2">
-                              <span className={`badge ${SERVICE_STATUS_BADGE[s.status_code] || ''}`}>{s.status_code}</span>
-                            </td>
-                            <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                              {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="px-3 py-6 text-slate-500 text-center" colSpan={6}>
-                            Sin servicios registrados para este ciudadano.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="min-h-0 overflow-hidden">
-              <h4 className="mb-2 text-sm font-semibold text-slate-700">Programas y apoyos</h4>
-              {citizenSupportsQuery.isPending ? (
-                <p className="text-sm text-slate-500">Cargando apoyos…</p>
-              ) : citizenSupportsQuery.isError ? (
-                <p className="text-sm text-red-600">No se pudieron cargar los apoyos.</p>
-              ) : (
-                <div className="max-h-56 overflow-auto">
-                  <table className="min-w-full text-sm border border-slate-200">
-                    <thead className="text-left text-slate-600 bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Programa</th>
-                        <th className="px-3 py-2">Tipo de apoyo</th>
-                        <th className="px-3 py-2">Descripción</th>
-                        <th className="px-3 py-2">Solicitado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(citizenSupportsQuery.data ?? []).length ? (
-                        citizenSupportsQuery.data.map((row) => (
-                          <tr key={row.id}>
-                            <td className="px-3 py-2 text-slate-500 whitespace-nowrap">#{row.id}</td>
-                            <td className="px-3 py-2">
-                              {row.program_id != null
-                                ? programById.get(row.program_id)?.name ?? `Programa #${row.program_id}`
-                                : '—'}
-                            </td>
-                            <td className="px-3 py-2">
-                              {row.support_type_id != null
-                                ? typeById.get(row.support_type_id)?.name ?? `Tipo #${row.support_type_id}`
-                                : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-slate-700">
-                              <div>{row.description || '—'}</div>
-                              {row.notes ? (
-                                <div className="text-xs text-slate-500 mt-0.5">Notas: {row.notes}</div>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                              {row.requested_at ? new Date(row.requested_at).toLocaleDateString() : '—'}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="px-3 py-6 text-slate-500 text-center" colSpan={5}>
-                            Sin programas o apoyos asignados.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-            </>
-          )}
-        </section>
+        {selectedCitizenId ? (
+          <CitizenFichaPanel
+            citizenId={selectedCitizenId}
+            programs={supportPrograms}
+            supportTypes={supportTypes}
+          />
+        ) : null}
       </SlidePanel>
     </div>
   );

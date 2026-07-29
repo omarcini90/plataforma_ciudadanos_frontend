@@ -6,6 +6,7 @@ import {
   IconChecklist,
   IconCheckbox,
   IconChevronDown,
+  IconFileSpreadsheet,
   IconGift,
   IconMap2,
   IconMenu2,
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/services', label: 'Servicios', icon: IconTool, permissions: ['services.read'] },
   { to: '/supports', label: 'Apoyos', icon: IconGift, permissions: ['supports.read'] },
   { to: '/map', label: 'Mapa', icon: IconMap2, permissions: ['map.view'] },
+  { to: '/reports', label: 'Reportes', icon: IconFileSpreadsheet, permissions: ['reports.view'] },
   { to: '/surveys', label: 'Encuestas', icon: IconNotebook, permissions: ['surveys.read'] },
   {
     label: 'Votaciones',

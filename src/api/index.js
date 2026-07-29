@@ -109,6 +109,27 @@ export const mapsApi = {
   stats: (params) => api.get('/maps/stats', { params }).then((r) => r.data),
 };
 
+export const reportsApi = {
+  citizens: (params) => api.get('/reports/citizens', { params }).then((r) => r.data),
+  exportCitizens: async (params) => {
+    const response = await api.get('/reports/citizens/export', {
+      params,
+      responseType: 'blob',
+    });
+    const disposition = response.headers?.['content-disposition'] || '';
+    const match = /filename="?([^"]+)"?/i.exec(disposition);
+    const filename = match?.[1] || `reporte_ciudadanos_${Date.now()}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+};
+
 /** Google Places y Geocoding vía backend (clave en servidor). */
 export const geoApi = {
   googleMapsReady: () => api.get('/geo/google-maps-ready').then((r) => r.data),

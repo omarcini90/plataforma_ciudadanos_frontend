@@ -13,6 +13,7 @@ import CatalogsPage from '../pages/Catalogs.jsx';
 import ServicesPage from '../pages/Services.jsx';
 import SupportsPage from '../pages/Supports.jsx';
 import MapPage from '../pages/MapView.jsx';
+import ReportsPage from '../pages/Reports.jsx';
 import SurveysPage from '../pages/Surveys.jsx';
 import LogsPage from '../pages/Logs.jsx';
 import Voting2021Page from '../pages/votings/Voting2021Page.jsx';
@@ -95,6 +96,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute permissions={['map.view']}>
               <MapPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <ProtectedRoute permissions={['reports.view']}>
+              <ReportsPage />
             </ProtectedRoute>
           }
         />
