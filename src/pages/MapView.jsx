@@ -261,7 +261,9 @@ export default function MapPage() {
     curp: '',
     status_code: '',
     municipio: '',
+    territorial_id: '',
     seccion_electoral: '',
+    colonia: '',
     operational_area_id: '',
     operational_area_offering_id: '',
     priority: '',
@@ -306,10 +308,42 @@ export default function MapPage() {
     staleTime: 120_000,
   });
 
+  const { data: territoriales = [] } = useQuery({
+    queryKey: ['catalogs', 'territoriales'],
+    queryFn: () => catalogsApi.territoriales(),
+    staleTime: 120_000,
+  });
+
+  const { data: colonias = [] } = useQuery({
+    queryKey: ['catalogs', 'colonias'],
+    queryFn: () => catalogsApi.colonias(),
+    staleTime: 120_000,
+  });
+
   const seccionesSorted = useMemo(
     () => [...secciones].sort((a, b) => a.id - b.id),
     [secciones],
   );
+
+  const territorialesSorted = useMemo(
+    () =>
+      [...territoriales].sort((a, b) =>
+        String(a.name || a.id).localeCompare(String(b.name || b.id), 'es'),
+      ),
+    [territoriales],
+  );
+
+  const coloniasSorted = useMemo(
+    () =>
+      [...colonias]
+        .filter((c) => c.is_active !== false)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es')),
+    [colonias],
+  );
+
+  const filterTerritorialIdNum = mapFilters.territorial_id
+    ? Number(mapFilters.territorial_id)
+    : null;
 
   const seccionIdSet = useMemo(
     () => new Set(seccionesSorted.map((s) => String(s.id))),
@@ -328,20 +362,25 @@ export default function MapPage() {
     if (mapFilters.status_code) p.status_code = mapFilters.status_code;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
     if (mapFilters.operational_area_offering_id)
       p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
     if (mapFilters.priority) p.priority = mapFilters.priority;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
+    const col = mapFilters.colonia.trim();
+    if (col) p.colonia = col;
     return p;
   }, [
     debouncedCurp,
     debouncedSeccion,
     mapFilters.status_code,
     mapFilters.municipio,
+    mapFilters.colonia,
     mapFilters.operational_area_offering_id,
     mapFilters.priority,
     filterAreaIdNum,
+    filterTerritorialIdNum,
   ]);
 
   const servicesQuery = useQuery({
@@ -377,7 +416,10 @@ export default function MapPage() {
     if (debouncedCurp) p.curp = debouncedCurp;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
+    const col = mapFilters.colonia.trim();
+    if (col) p.colonia = col;
     if (filterProgramIdNum) p.program_id = filterProgramIdNum;
     if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
     return p;
@@ -385,6 +427,8 @@ export default function MapPage() {
     debouncedCurp,
     debouncedSeccion,
     mapFilters.municipio,
+    mapFilters.colonia,
+    filterTerritorialIdNum,
     filterProgramIdNum,
     filterSupportTypeIdNum,
   ]);
@@ -393,6 +437,43 @@ export default function MapPage() {
     queryKey: ['map-program-markers', programMarkerParams],
     queryFn: () => mapsApi.programMarkers(programMarkerParams),
     enabled: showPrograms,
+  });
+
+  const statsParams = useMemo(() => {
+    const p = {};
+    if (debouncedCurp) p.curp = debouncedCurp;
+    if (mapFilters.status_code) p.status_code = mapFilters.status_code;
+    const m = mapFilters.municipio.trim();
+    if (m) p.municipio = m;
+    if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
+    if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
+    const col = mapFilters.colonia.trim();
+    if (col) p.colonia = col;
+    if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
+    if (mapFilters.operational_area_offering_id)
+      p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
+    if (mapFilters.priority) p.priority = mapFilters.priority;
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
+    return p;
+  }, [
+    debouncedCurp,
+    debouncedSeccion,
+    mapFilters.status_code,
+    mapFilters.municipio,
+    mapFilters.colonia,
+    mapFilters.operational_area_offering_id,
+    mapFilters.priority,
+    filterAreaIdNum,
+    filterTerritorialIdNum,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
+  ]);
+
+  const statsQuery = useQuery({
+    queryKey: ['map-stats', statsParams],
+    queryFn: () => mapsApi.stats(statsParams),
+    staleTime: 15_000,
   });
 
   const citizenDetailQuery = useQuery({
@@ -429,8 +510,10 @@ export default function MapPage() {
     Boolean(debouncedCurp) ||
     Boolean(mapFilters.status_code) ||
     Boolean(mapFilters.municipio.trim()) ||
+    Boolean(filterTerritorialIdNum) ||
     Boolean(debouncedSeccion) ||
     Boolean(mapFilters.seccion_electoral.trim()) ||
+    Boolean(mapFilters.colonia.trim()) ||
     Boolean(filterAreaIdNum) ||
     Boolean(mapFilters.operational_area_offering_id) ||
     Boolean(mapFilters.priority) ||
@@ -440,7 +523,9 @@ export default function MapPage() {
   const locationFilterCount =
     Number(Boolean(debouncedCurp || mapFilters.curp.trim())) +
     Number(Boolean(mapFilters.municipio.trim())) +
-    Number(Boolean(debouncedSeccion || mapFilters.seccion_electoral.trim()));
+    Number(Boolean(filterTerritorialIdNum)) +
+    Number(Boolean(debouncedSeccion || mapFilters.seccion_electoral.trim())) +
+    Number(Boolean(mapFilters.colonia.trim()));
   const serviceFilterCount =
     Number(Boolean(mapFilters.status_code)) +
     Number(Boolean(filterAreaIdNum)) +
@@ -454,7 +539,9 @@ export default function MapPage() {
       curp: '',
       status_code: '',
       municipio: '',
+      territorial_id: '',
       seccion_electoral: '',
+      colonia: '',
       operational_area_id: '',
       operational_area_offering_id: '',
       priority: '',
@@ -476,28 +563,76 @@ export default function MapPage() {
   const sectionFilterNum = sectionFilter ? Number(sectionFilter) : null;
   const sectionInputPending = Boolean(sectionInput) && sectionInput !== sectionFilter;
 
+  const seccionesForTerritorial = useMemo(() => {
+    if (!filterTerritorialIdNum || !sectionsGeo?.features?.length) return seccionesSorted;
+    const tid = String(filterTerritorialIdNum);
+    const ids = new Set();
+    for (const f of sectionsGeo.features) {
+      const p = f.properties || {};
+      if (String(p.id_territorial ?? '') === tid) {
+        const code = String(p.code ?? p.seccion_id ?? p.id_seccion ?? '');
+        if (code) ids.add(code);
+      }
+    }
+    if (!ids.size) return seccionesSorted;
+    return seccionesSorted.filter((s) => ids.has(String(s.id)));
+  }, [filterTerritorialIdNum, sectionsGeo, seccionesSorted]);
+
   const visibleSectionsGeo = useMemo(() => {
     if (!sectionsGeo?.features?.length) return sectionsGeo;
-    if (!sectionFilter) return sectionsGeo;
 
-    const features = sectionsGeo.features.filter((f) => {
-      const p = f.properties || {};
-      return (
-        String(p.code ?? '') === sectionFilter ||
-        p.seccion_id === sectionFilterNum ||
-        p.id_seccion === sectionFilterNum
-      );
-    });
+    let features = sectionsGeo.features;
+    if (filterTerritorialIdNum) {
+      const tid = String(filterTerritorialIdNum);
+      features = features.filter((f) => String(f.properties?.id_territorial ?? '') === tid);
+    }
+    if (sectionFilter) {
+      features = features.filter((f) => {
+        const p = f.properties || {};
+        return (
+          String(p.code ?? '') === sectionFilter ||
+          p.seccion_id === sectionFilterNum ||
+          p.id_seccion === sectionFilterNum
+        );
+      });
+    }
 
     return { ...sectionsGeo, features };
-  }, [sectionsGeo, sectionFilter, sectionFilterNum]);
+  }, [sectionsGeo, sectionFilter, sectionFilterNum, filterTerritorialIdNum]);
+
+  const programLegendItems = useMemo(() => {
+    const byType = new Map();
+    for (const m of mapProgramMarkers) {
+      const key = m.support_type_id ?? `p-${m.program_id ?? 'x'}`;
+      if (byType.has(key)) continue;
+      byType.set(key, {
+        key,
+        label: m.support_type_name || m.program_name || 'Apoyo',
+        color: m.color || PROGRAM_MARKER_COLOR,
+      });
+    }
+    return [...byType.values()].slice(0, 12);
+  }, [mapProgramMarkers]);
+
+  const stats = statsQuery.data;
+  const groupLevelLabel =
+    stats?.group_level === 'colonia'
+      ? 'por colonia'
+      : stats?.group_level === 'seccion'
+        ? 'por sección'
+        : 'por territorial';
+
+  const fmtStat = (n) =>
+    Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 
   const sectionCount = sectionsGeo?.features?.length ?? 0;
   const visibleSectionCount = visibleSectionsGeo?.features?.length ?? 0;
   const sectionInputUnknown =
     Boolean(sectionFilter) && !seccionIdSet.has(sectionFilter) && visibleSectionCount === 0;
   const showSectionPolygons =
-    Boolean(sectionFilter) || (showSections && visibleSectionCount > 0);
+    Boolean(sectionFilter) ||
+    Boolean(filterTerritorialIdNum) ||
+    (showSections && visibleSectionCount > 0);
 
   const geoJsonKey = useMemo(() => {
     if (!visibleSectionsGeo?.features?.length) return 'empty';
@@ -565,8 +700,8 @@ export default function MapPage() {
           <div>
             <h3 className="font-semibold text-slate-800">Filtros del mapa</h3>
             <p className="text-sm text-slate-500">
-              Usa los acordeones para filtrar servicios, programas y ubicación. Escribe el número de
-              sección para encuadrar su polígono.
+              Filtra por territorial → sección → colonia; el resumen estadístico se actualiza con los
+              mismos filtros.
             </p>
           </div>
           {hasActiveFilters && (
@@ -579,7 +714,7 @@ export default function MapPage() {
         <div className="space-y-2">
           <MapFilterAccordion
             title="Ubicación y ciudadano"
-            hint="Municipio, sección electoral y CURP"
+            hint="Territorial, sección, colonia, municipio y CURP"
             defaultOpen
             badge={locationFilterCount ? `${locationFilterCount} activo${locationFilterCount === 1 ? '' : 's'}` : null}
           >
@@ -604,6 +739,30 @@ export default function MapPage() {
                 />
               </div>
               <div>
+                <label className="label" htmlFor="map-filter-territorial">
+                  Territorial
+                </label>
+                <select
+                  id="map-filter-territorial"
+                  className="input"
+                  value={mapFilters.territorial_id}
+                  onChange={(e) =>
+                    setMapFilters((f) => ({
+                      ...f,
+                      territorial_id: e.target.value,
+                      seccion_electoral: '',
+                    }))
+                  }
+                >
+                  <option value="">Todos</option>
+                  {territorialesSorted.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || `Territorial ${t.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="label" htmlFor="map-filter-seccion">
                   Sección electoral
                 </label>
@@ -623,7 +782,7 @@ export default function MapPage() {
                   }
                 />
                 <datalist id="map-secciones-datalist">
-                  {seccionesSorted.map((s) => (
+                  {seccionesForTerritorial.map((s) => (
                     <option key={s.id} value={String(s.id)} />
                   ))}
                 </datalist>
@@ -632,6 +791,24 @@ export default function MapPage() {
                 ) : sectionInputUnknown ? (
                   <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
                 ) : null}
+              </div>
+              <div>
+                <label className="label" htmlFor="map-filter-colonia">
+                  Colonia
+                </label>
+                <input
+                  id="map-filter-colonia"
+                  className="input"
+                  list="map-colonias-datalist"
+                  placeholder="Colonia del domicilio"
+                  value={mapFilters.colonia}
+                  onChange={(e) => setMapFilters((f) => ({ ...f, colonia: e.target.value }))}
+                />
+                <datalist id="map-colonias-datalist">
+                  {coloniasSorted.map((c) => (
+                    <option key={c.id} value={c.name} />
+                  ))}
+                </datalist>
               </div>
             </div>
           </MapFilterAccordion>
@@ -715,7 +892,7 @@ export default function MapPage() {
 
           <MapFilterAccordion
             title="Programas y apoyos"
-            hint="Filtra la capa morada del mapa por programa o tipo de apoyo"
+            hint="Filtra la capa de apoyos del mapa por programa o tipo; el color sale del apoyo"
             badge={programFilterCount ? `${programFilterCount} activo${programFilterCount === 1 ? '' : 's'}` : null}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -765,6 +942,136 @@ export default function MapPage() {
         </div>
       </section>
 
+      <section className="space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="card py-3 px-4">
+            <p className="text-xs text-slate-500">Ciudadanos geolocalizados</p>
+            <p className="text-lg font-semibold text-slate-800">
+              {statsQuery.isPending ? '…' : fmtStat(stats?.citizens)}
+            </p>
+          </div>
+          <div className="card py-3 px-4">
+            <p className="text-xs text-slate-500">Servicios</p>
+            <p className="text-lg font-semibold text-slate-800">
+              {statsQuery.isPending ? '…' : fmtStat(stats?.services)}
+            </p>
+          </div>
+          <div className="card py-3 px-4">
+            <p className="text-xs text-slate-500">Apoyos</p>
+            <p className="text-lg font-semibold text-slate-800">
+              {statsQuery.isPending ? '…' : fmtStat(stats?.supports)}
+            </p>
+          </div>
+          <div className="card py-3 px-4">
+            <p className="text-xs text-slate-500">Desglose</p>
+            <p className="text-lg font-semibold text-slate-800 capitalize">
+              {statsQuery.isPending ? '…' : groupLevelLabel}
+            </p>
+          </div>
+        </div>
+
+        {(stats?.by_status?.length > 0 || stats?.by_program?.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {stats?.by_status?.length > 0 && (
+              <div className="card overflow-hidden p-0">
+                <div className="border-b border-slate-100 px-4 py-2">
+                  <h4 className="text-sm font-semibold text-slate-700">Servicios por estatus</h4>
+                </div>
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {stats.by_status.map((row) => (
+                    <li key={row.status_code} className="flex items-center justify-between gap-3 px-4 py-2">
+                      <span className="inline-flex items-center gap-2 text-slate-700">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ background: STATUS_HEX[row.status_code] || '#753232' }}
+                        />
+                        {String(row.status_code).replace(/_/g, ' ')}
+                      </span>
+                      <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stats?.by_program?.length > 0 && (
+              <div className="card overflow-hidden p-0">
+                <div className="border-b border-slate-100 px-4 py-2">
+                  <h4 className="text-sm font-semibold text-slate-700">Apoyos por programa</h4>
+                </div>
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {stats.by_program.map((row) => (
+                    <li
+                      key={row.program_id ?? row.program_name}
+                      className="flex items-center justify-between gap-3 px-4 py-2"
+                    >
+                      <span className="inline-flex items-center gap-2 min-w-0 text-slate-700">
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+                          style={{ background: row.color || PROGRAM_MARKER_COLOR }}
+                        />
+                        <span className="truncate">{row.program_name}</span>
+                      </span>
+                      <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="card overflow-hidden p-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+            <h4 className="text-sm font-semibold text-slate-700">
+              Resumen {groupLevelLabel}
+            </h4>
+            <span className="text-xs text-slate-500">
+              {statsQuery.isPending
+                ? 'Calculando…'
+                : `${fmtStat(stats?.groups?.length || 0)} grupo${(stats?.groups?.length || 0) === 1 ? '' : 's'}`}
+            </span>
+          </div>
+          <div className="max-h-56 overflow-auto">
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50 text-left text-slate-600 border-b border-slate-200">
+                <tr>
+                  <th className="px-3 py-2 font-medium">
+                    {stats?.group_level === 'colonia'
+                      ? 'Colonia'
+                      : stats?.group_level === 'seccion'
+                        ? 'Sección'
+                        : 'Territorial'}
+                  </th>
+                  <th className="px-3 py-2 font-medium text-right">Ciudadanos</th>
+                  <th className="px-3 py-2 font-medium text-right">Servicios</th>
+                  <th className="px-3 py-2 font-medium text-right">Apoyos</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(stats?.groups ?? []).length ? (
+                  stats.groups.map((g) => (
+                    <tr key={g.key}>
+                      <td className="px-3 py-2 text-slate-800">{g.label}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.citizens)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.services)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{fmtStat(g.supports)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-3 py-6 text-center text-slate-500" colSpan={4}>
+                      {statsQuery.isPending
+                        ? 'Cargando resumen…'
+                        : 'Sin datos geolocalizados para el filtro actual.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <div className="legend flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         <span className="font-medium text-slate-700">Leyenda estatus:</span>
         {Object.entries(STATUS_HEX).map(([code, hex]) => (
@@ -774,13 +1081,26 @@ export default function MapPage() {
           </span>
         ))}
         <span className="mx-1 text-slate-300">|</span>
-        <span className="inline-flex items-center gap-1">
-          <span
-            className="inline-block h-2.5 w-2.5 rounded-sm border border-white shadow"
-            style={{ background: PROGRAM_MARKER_COLOR }}
-          />
-          Apoyo / programa
-        </span>
+        <span className="font-medium text-slate-700">Apoyos:</span>
+        {programLegendItems.length ? (
+          programLegendItems.map((item) => (
+            <span key={item.key} className="inline-flex items-center gap-1">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-sm border border-white shadow"
+                style={{ background: item.color }}
+              />
+              {item.label}
+            </span>
+          ))
+        ) : (
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-sm border border-white shadow"
+              style={{ background: PROGRAM_MARKER_COLOR }}
+            />
+            Apoyo / programa
+          </span>
+        )}
       </div>
 
       <div
@@ -850,7 +1170,7 @@ export default function MapPage() {
                 <Marker
                   key={`prog-citizen-${m.citizen_id}`}
                   position={[Number(m.latitud), Number(m.longitud)]}
-                  icon={buildProgramMarkerIcon()}
+                  icon={buildProgramMarkerIcon(m.color || PROGRAM_MARKER_COLOR)}
                   eventHandlers={{
                     click: () => setSelectedCitizenId(m.citizen_id),
                   }}

@@ -61,7 +61,28 @@ function Modal({ title, children, onClose }) {
 }
 
 const emptyProgram = { name: '', code: '', description: '', is_active: true };
-const emptyType = { program_id: '', name: '', code: '', description: '', is_active: true };
+const emptyType = {
+  program_id: '',
+  name: '',
+  code: '',
+  description: '',
+  color: '#7c3aed',
+  is_active: true,
+};
+
+const DEFAULT_APOYO_COLOR = '#7c3aed';
+
+function normalizeHexColor(value, fallback = DEFAULT_APOYO_COLOR) {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+  if (/^#[0-9A-Fa-f]{6}$/.test(withHash)) return withHash.toLowerCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(withHash)) {
+    const [, a, b, c] = withHash;
+    return `#${a}${a}${b}${b}${c}${c}`.toLowerCase();
+  }
+  return fallback;
+}
 
 export default function SupportsPage() {
   const qc = useQueryClient();
@@ -137,6 +158,9 @@ export default function SupportsPage() {
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['programs'] });
     qc.invalidateQueries({ queryKey: ['types'] });
+    qc.invalidateQueries({ queryKey: ['supports'] });
+    qc.invalidateQueries({ queryKey: ['map-program-markers'] });
+    qc.invalidateQueries({ queryKey: ['map-stats'] });
   };
 
   const createProgram = useMutation({
@@ -172,6 +196,7 @@ export default function SupportsPage() {
       supportsApi.createType({
         ...typeForm,
         program_id: typeForm.program_id ? Number(typeForm.program_id) : null,
+        color: normalizeHexColor(typeForm.color),
       }),
     onSuccess: () => {
       toast.success('Apoyo registrado');
@@ -186,6 +211,7 @@ export default function SupportsPage() {
       supportsApi.updateType(id, {
         ...typeForm,
         program_id: typeForm.program_id ? Number(typeForm.program_id) : null,
+        color: normalizeHexColor(typeForm.color),
       }),
     onSuccess: () => {
       toast.success('Apoyo actualizado');
@@ -240,6 +266,7 @@ export default function SupportsPage() {
       name: t.name,
       code: t.code || '',
       description: t.description || '',
+      color: normalizeHexColor(t.color),
       is_active: t.is_active,
     });
     setTypeModal({ edit: t });
@@ -371,6 +398,7 @@ export default function SupportsPage() {
             <tr>
               <th className="px-3 py-2">Programa</th>
               <th className="px-3 py-2">Apoyo</th>
+              <th className="px-3 py-2">Color</th>
               <th className="px-3 py-2">Descripción</th>
               <th className="px-3 py-2">Estado</th>
               {canMutate && (
@@ -383,7 +411,7 @@ export default function SupportsPage() {
           <tbody className="divide-y">
             {loading && (
               <tr>
-                <td colSpan={canMutate ? 5 : 4} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={canMutate ? 6 : 5} className="px-3 py-8 text-center text-slate-500">
                   Cargando…
                 </td>
               </tr>
@@ -413,7 +441,7 @@ export default function SupportsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-500 italic align-top" colSpan={3}>
+                  <td className="px-3 py-2 text-slate-500 italic align-top" colSpan={4}>
                     Sin tipos de apoyo registrados — usa «Agregar apoyo» para asociar uno a este programa.
                   </td>
                   {canMutate && <td className="px-3 py-2 align-middle whitespace-nowrap w-[1%]" />}
@@ -422,6 +450,7 @@ export default function SupportsPage() {
             {!loading &&
               filteredRows.map((t) => {
                 const prog = t.program_id != null ? programById.get(t.program_id) : null;
+                const color = normalizeHexColor(t.color);
                 return (
                   <tr key={t.id} className={!t.is_active ? 'bg-slate-50/80' : ''}>
                     <td className="px-3 py-2 align-top">
@@ -451,6 +480,16 @@ export default function SupportsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 font-medium text-slate-800 align-top">{t.name}</td>
+                    <td className="px-3 py-2 align-top">
+                      <span className="inline-flex items-center gap-2 text-xs text-slate-600">
+                        <span
+                          className="inline-block h-3.5 w-3.5 rounded-sm border border-slate-200 shadow-sm"
+                          style={{ background: color }}
+                          title={color}
+                        />
+                        {color}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 align-top text-slate-600 max-w-xs truncate" title={t.description || ''}>
                       {t.description || '—'}
                     </td>
@@ -628,6 +667,28 @@ export default function SupportsPage() {
                 value={typeForm.description}
                 onChange={(e) => setTypeForm((f) => ({ ...f, description: e.target.value }))}
               />
+            </div>
+            <div>
+              <label className="label">Color en el mapa</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  className="h-10 w-14 cursor-pointer rounded border border-slate-200 bg-white p-1"
+                  value={normalizeHexColor(typeForm.color)}
+                  onChange={(e) => setTypeForm((f) => ({ ...f, color: e.target.value }))}
+                  title="Color del indicador"
+                />
+                <input
+                  className="input font-mono uppercase"
+                  value={typeForm.color}
+                  onChange={(e) => setTypeForm((f) => ({ ...f, color: e.target.value }))}
+                  placeholder="#7c3aed"
+                  maxLength={7}
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Este color se usa en los marcadores de apoyos del mapa interactivo.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
               <input

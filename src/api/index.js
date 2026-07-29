@@ -106,6 +106,7 @@ export const mapsApi = {
   sectionsGeoJson: () => api.get('/maps/sections/geojson').then((r) => r.data),
   serviceMarkers: (params) => api.get('/maps/service-markers', { params }).then((r) => r.data),
   programMarkers: (params) => api.get('/maps/program-markers', { params }).then((r) => r.data),
+  stats: (params) => api.get('/maps/stats', { params }).then((r) => r.data),
 };
 
 /** Google Places y Geocoding vía backend (clave en servidor). */
