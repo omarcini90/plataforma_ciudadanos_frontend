@@ -27,6 +27,7 @@ fi
 echo "==> Construyendo imagen web (el sitio sigue sirviendo hasta el up)..."
 # Limitar paralelismo del builder para VPS con poca RAM (evita OOM al compilar Vite).
 export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export BUILDKIT_MAX_PARALLELISM="${BUILDKIT_MAX_PARALLELISM:-1}"
 docker compose build web
 
 echo "==> Recreando contenedor web..."

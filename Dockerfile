@@ -11,8 +11,11 @@ ENV VITE_API_URL=$VITE_API_URL \
     VITE_GOOGLE_MAPS_ENABLED=$VITE_GOOGLE_MAPS_ENABLED \
     VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 
+# Heap acotado para VPS con poca RAM (evita thrashing / cuelgue en rendering chunks).
+ENV NODE_OPTIONS="--max-old-space-size=768"
+
 COPY package*.json ./
-RUN npm install
+RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 

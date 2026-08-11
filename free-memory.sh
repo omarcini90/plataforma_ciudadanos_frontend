@@ -71,6 +71,24 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     fi
   else
     echo "==> Sin particiones/archivos de swap activos; se omite reciclado."
+    # En VPS ~2 GiB el build de Vite suele colgarse sin swap. Crear uno temporal.
+    SWAP_FILE="${SWAP_FILE:-/swapfile-plataforma}"
+    SWAP_SIZE_MB="${SWAP_SIZE_MB:-2048}"
+    echo "==> Creando swap temporal (${SWAP_SIZE_MB} MiB) en ${SWAP_FILE}..."
+    if [[ -f "$SWAP_FILE" ]]; then
+      if run_root swapon "$SWAP_FILE" 2>/dev/null; then
+        echo "  OK: swap reactivado ($SWAP_FILE)"
+      else
+        echo "  AVISO: existe $SWAP_FILE pero no se pudo activar."
+      fi
+    elif run_root dd if=/dev/zero of="$SWAP_FILE" bs=1M count="$SWAP_SIZE_MB" status=none \
+      && run_root chmod 600 "$SWAP_FILE" \
+      && run_root mkswap "$SWAP_FILE" >/dev/null \
+      && run_root swapon "$SWAP_FILE"; then
+      echo "  OK: swap temporal activo ($SWAP_FILE)"
+    else
+      echo "  AVISO: no se pudo crear swap; el build puede colgarse por OOM."
+    fi
   fi
 else
   echo "==> Host no-Linux ($(uname -s)): se omite drop_caches/swap."

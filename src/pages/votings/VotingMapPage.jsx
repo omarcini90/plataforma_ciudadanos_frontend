@@ -35,7 +35,6 @@ const PARTY_COLORS = {
   'PRI-PRD': { fill: '#16a34a', stroke: '#15803d' },
   'PT-MORENA': { fill: '#be123c', stroke: '#9f1239' },
   'PVEM-PT-MORENA': { fill: '#b91c1c', stroke: '#991b1b' },
-  MORENA: { fill: '#9f2241', stroke: '#7a1a32' },
   OTRO: { fill: '#94a3b8', stroke: '#64748b' },
 };
 

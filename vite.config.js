@@ -13,4 +13,14 @@ export default defineConfig({
     port: 5173,
     host: true,
   },
+  // VPS ~2 GiB: menos paralelismo y sin gzip report (suele colgar en "rendering chunks").
+  build: {
+    sourcemap: false,
+    reportCompressedSize: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      maxParallelFileOps: 1,
+    },
+  },
 });
