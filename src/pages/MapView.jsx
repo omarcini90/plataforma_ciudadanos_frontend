@@ -142,6 +142,15 @@ const buildIcon = (color = '#753232') =>
 
 const PROGRAM_MARKER_COLOR = '#7c3aed';
 
+/** Clustering suave: menos agrupación y se desactiva al acercar el zoom para ver colores. */
+const CLUSTER_OPTIONS = {
+  chunkedLoading: true,
+  maxClusterRadius: 28,
+  disableClusteringAtZoom: 13,
+  showCoverageOnHover: false,
+  spiderfyOnMaxZoom: true,
+};
+
 const buildProgramMarkerIcon = (color = PROGRAM_MARKER_COLOR) =>
   L.divIcon({
     className: '',
@@ -1169,7 +1178,7 @@ export default function MapPage() {
             />
           )}
           {showServices && (
-            <MarkerClusterGroup chunkedLoading>
+            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
               {serviceMarkers.map((m) => (
                 <Marker
                   key={m.service_id}
@@ -1183,7 +1192,7 @@ export default function MapPage() {
             </MarkerClusterGroup>
           )}
           {showPrograms && (
-            <MarkerClusterGroup chunkedLoading>
+            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
               {mapProgramMarkers.map((m) => (
                 <Marker
                   key={`prog-citizen-${m.citizen_id}`}
