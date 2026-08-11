@@ -142,11 +142,10 @@ const buildIcon = (color = '#753232') =>
 
 const PROGRAM_MARKER_COLOR = '#7c3aed';
 
-/** Clustering suave: menos agrupación y se desactiva al acercar el zoom para ver colores. */
+/** Clustering normal a vista amplia; se desactiva al filtrar por sección. */
 const CLUSTER_OPTIONS = {
   chunkedLoading: true,
-  maxClusterRadius: 28,
-  disableClusteringAtZoom: 13,
+  maxClusterRadius: 80,
   showCoverageOnHover: false,
   spiderfyOnMaxZoom: true,
 };
@@ -1177,9 +1176,9 @@ export default function MapPage() {
               }}
             />
           )}
-          {showServices && (
-            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
-              {serviceMarkers.map((m) => (
+          {showServices &&
+            (sectionFilter ? (
+              serviceMarkers.map((m) => (
                 <Marker
                   key={m.service_id}
                   position={[Number(m.latitud), Number(m.longitud)]}
@@ -1188,12 +1187,24 @@ export default function MapPage() {
                     click: () => setSelectedCitizenId(m.citizen_id),
                   }}
                 />
-              ))}
-            </MarkerClusterGroup>
-          )}
-          {showPrograms && (
-            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
-              {mapProgramMarkers.map((m) => (
+              ))
+            ) : (
+              <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+                {serviceMarkers.map((m) => (
+                  <Marker
+                    key={m.service_id}
+                    position={[Number(m.latitud), Number(m.longitud)]}
+                    icon={buildIcon(STATUS_HEX[m.status_code] || '#753232')}
+                    eventHandlers={{
+                      click: () => setSelectedCitizenId(m.citizen_id),
+                    }}
+                  />
+                ))}
+              </MarkerClusterGroup>
+            ))}
+          {showPrograms &&
+            (sectionFilter ? (
+              mapProgramMarkers.map((m) => (
                 <Marker
                   key={`prog-citizen-${m.citizen_id}`}
                   position={[Number(m.latitud), Number(m.longitud)]}
@@ -1202,9 +1213,21 @@ export default function MapPage() {
                     click: () => setSelectedCitizenId(m.citizen_id),
                   }}
                 />
-              ))}
-            </MarkerClusterGroup>
-          )}
+              ))
+            ) : (
+              <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+                {mapProgramMarkers.map((m) => (
+                  <Marker
+                    key={`prog-citizen-${m.citizen_id}`}
+                    position={[Number(m.latitud), Number(m.longitud)]}
+                    icon={buildProgramMarkerIcon(m.color || PROGRAM_MARKER_COLOR)}
+                    eventHandlers={{
+                      click: () => setSelectedCitizenId(m.citizen_id),
+                    }}
+                  />
+                ))}
+              </MarkerClusterGroup>
+            ))}
         </MapContainer>
       </div>
 
