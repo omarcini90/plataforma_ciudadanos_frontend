@@ -200,10 +200,10 @@ function MapFilterAccordion({ title, hint, defaultOpen = false, badge, children 
       open={defaultOpen}
       className="group rounded-lg border border-slate-200 bg-white shadow-sm open:shadow-none"
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 marker:content-none [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
-          <span className="font-medium text-slate-800">{title}</span>
-          {hint ? <p className="text-xs text-slate-500 mt-0.5">{hint}</p> : null}
+          <span className="text-sm font-medium text-slate-800">{title}</span>
+          {hint ? <p className="text-xs text-slate-500 mt-0.5 truncate">{hint}</p> : null}
         </div>
         <span className="flex shrink-0 items-center gap-2 text-slate-400">
           {badge ? (
@@ -225,7 +225,7 @@ function MapFilterAccordion({ title, hint, defaultOpen = false, badge, children 
           </svg>
         </span>
       </summary>
-      <div className="border-t border-slate-100 px-4 py-3">{children}</div>
+      <div className="border-t border-slate-100 px-3 py-2.5">{children}</div>
     </details>
   );
 }
@@ -641,301 +641,313 @@ export default function MapPage() {
         </div>
       </header>
 
-      <section className="card space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <section className="card space-y-2.5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-slate-800">Filtros del mapa</h3>
+              <p className="text-sm text-slate-500">Territorial → sección → colonia</p>
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="text-sm text-brand-700 hover:underline self-start"
+                onClick={clearMapFilters}
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <MapFilterAccordion
+              title="Ubicación y ciudadano"
+              hint="CURP, municipio, territorial, sección, colonia"
+              defaultOpen={locationFilterCount > 0}
+              badge={
+                locationFilterCount
+                  ? `${locationFilterCount} activo${locationFilterCount === 1 ? '' : 's'}`
+                  : null
+              }
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="label">CURP</label>
+                  <input
+                    className="input"
+                    placeholder="Coincidencia parcial"
+                    value={mapFilters.curp}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, curp: e.target.value }))}
+                    autoCapitalize="characters"
+                  />
+                </div>
+                <div>
+                  <label className="label">Municipio</label>
+                  <input
+                    className="input"
+                    placeholder="Domicilio principal"
+                    value={mapFilters.municipio}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, municipio: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="map-filter-territorial">
+                    Territorial
+                  </label>
+                  <select
+                    id="map-filter-territorial"
+                    className="input"
+                    value={mapFilters.territorial_id}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({
+                        ...f,
+                        territorial_id: e.target.value,
+                        seccion_electoral: '',
+                      }))
+                    }
+                  >
+                    <option value="">Todos</option>
+                    {territorialesSorted.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name || `Territorial ${t.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="map-filter-seccion">
+                    Sección electoral
+                  </label>
+                  <input
+                    id="map-filter-seccion"
+                    className="input"
+                    list="map-secciones-datalist"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="5463"
+                    value={mapFilters.seccion_electoral}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({
+                        ...f,
+                        seccion_electoral: e.target.value.replace(/\D/g, ''),
+                      }))
+                    }
+                  />
+                  <datalist id="map-secciones-datalist">
+                    {seccionesForTerritorial.map((s) => (
+                      <option key={s.id} value={String(s.id)} />
+                    ))}
+                  </datalist>
+                  {sectionInputPending ? (
+                    <p className="mt-1 text-xs text-slate-400">Filtrando…</p>
+                  ) : sectionInputUnknown ? (
+                    <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
+                  ) : null}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="map-filter-colonia">
+                    Colonia
+                  </label>
+                  <input
+                    id="map-filter-colonia"
+                    className="input"
+                    list="map-colonias-datalist"
+                    placeholder="Colonia del domicilio"
+                    value={mapFilters.colonia}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, colonia: e.target.value }))}
+                  />
+                  <datalist id="map-colonias-datalist">
+                    {coloniasSorted.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+            </MapFilterAccordion>
+
+            <MapFilterAccordion
+              title="Servicios operativos"
+              hint="Estatus, área, catálogo y prioridad"
+              defaultOpen={serviceFilterCount > 0}
+              badge={
+                serviceFilterCount
+                  ? `${serviceFilterCount} activo${serviceFilterCount === 1 ? '' : 's'}`
+                  : null
+              }
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="label">Estatus</label>
+                  <select
+                    className="input"
+                    value={mapFilters.status_code}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, status_code: e.target.value }))}
+                  >
+                    {STATUSES.map((s) => (
+                      <option key={s || 'all'} value={s}>
+                        {s || 'Todos'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Área operativa</label>
+                  <select
+                    className="input"
+                    value={mapFilters.operational_area_id}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({
+                        ...f,
+                        operational_area_id: e.target.value,
+                        operational_area_offering_id: '',
+                      }))
+                    }
+                  >
+                    <option value="">Todas</option>
+                    {areas.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Servicio (catálogo)</label>
+                  <select
+                    className="input"
+                    value={mapFilters.operational_area_offering_id}
+                    disabled={!filterAreaIdNum}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({ ...f, operational_area_offering_id: e.target.value }))
+                    }
+                  >
+                    <option value="">Todos en el área</option>
+                    {filterOfferings.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Prioridad</label>
+                  <select
+                    className="input"
+                    value={mapFilters.priority}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, priority: e.target.value }))}
+                  >
+                    <option value="">Todas</option>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </MapFilterAccordion>
+
+            <MapFilterAccordion
+              title="Programas y apoyos"
+              hint="Programa o tipo de apoyo"
+              defaultOpen={programFilterCount > 0}
+              badge={
+                programFilterCount
+                  ? `${programFilterCount} activo${programFilterCount === 1 ? '' : 's'}`
+                  : null
+              }
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="label">Programa</label>
+                  <select
+                    className="input"
+                    value={mapFilters.program_id}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({
+                        ...f,
+                        program_id: e.target.value,
+                        support_type_id: '',
+                      }))
+                    }
+                  >
+                    <option value="">Todos los programas</option>
+                    {supportPrograms.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Tipo de apoyo</label>
+                  <select
+                    className="input"
+                    value={mapFilters.support_type_id}
+                    disabled={!programTypesFiltered.length}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({ ...f, support_type_id: e.target.value }))
+                    }
+                  >
+                    <option value="">
+                      {filterProgramIdNum ? 'Todos en el programa' : 'Todos los tipos'}
+                    </option>
+                    {programTypesFiltered.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </MapFilterAccordion>
+          </div>
+        </section>
+
+        <section className="card space-y-3 p-4 lg:max-h-[min(28rem,55vh)] lg:overflow-y-auto">
           <div>
-            <h3 className="font-semibold text-slate-800">Filtros del mapa</h3>
+            <h3 className="font-semibold text-slate-800">Resumen estadístico</h3>
             <p className="text-sm text-slate-500">
-              Filtra por territorial → sección → colonia; el resumen estadístico se actualiza con los
-              mismos filtros.
+              {statsQuery.isPending
+                ? 'Calculando totales…'
+                : `${fmtStat(stats?.citizens)} civ. · ${fmtStat(stats?.services)} svc. · ${fmtStat(stats?.supports)} apoyos`}
             </p>
           </div>
-          {hasActiveFilters && (
-            <button type="button" className="text-sm text-brand-700 hover:underline self-start" onClick={clearMapFilters}>
-              Limpiar filtros
-            </button>
-          )}
-        </div>
 
-        <div className="space-y-2">
-          <MapFilterAccordion
-            title="Ubicación y ciudadano"
-            hint="Territorial, sección, colonia, municipio y CURP"
-            defaultOpen
-            badge={locationFilterCount ? `${locationFilterCount} activo${locationFilterCount === 1 ? '' : 's'}` : null}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <label className="label">CURP</label>
-                <input
-                  className="input"
-                  placeholder="Coincidencia parcial"
-                  value={mapFilters.curp}
-                  onChange={(e) => setMapFilters((f) => ({ ...f, curp: e.target.value }))}
-                  autoCapitalize="characters"
-                />
-              </div>
-              <div>
-                <label className="label">Municipio</label>
-                <input
-                  className="input"
-                  placeholder="Domicilio principal"
-                  value={mapFilters.municipio}
-                  onChange={(e) => setMapFilters((f) => ({ ...f, municipio: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="map-filter-territorial">
-                  Territorial
-                </label>
-                <select
-                  id="map-filter-territorial"
-                  className="input"
-                  value={mapFilters.territorial_id}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({
-                      ...f,
-                      territorial_id: e.target.value,
-                      seccion_electoral: '',
-                    }))
-                  }
-                >
-                  <option value="">Todos</option>
-                  {territorialesSorted.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name || `Territorial ${t.id}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="map-filter-seccion">
-                  Sección electoral
-                </label>
-                <input
-                  id="map-filter-seccion"
-                  className="input"
-                  list="map-secciones-datalist"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="5463"
-                  value={mapFilters.seccion_electoral}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({
-                      ...f,
-                      seccion_electoral: e.target.value.replace(/\D/g, ''),
-                    }))
-                  }
-                />
-                <datalist id="map-secciones-datalist">
-                  {seccionesForTerritorial.map((s) => (
-                    <option key={s.id} value={String(s.id)} />
-                  ))}
-                </datalist>
-                {sectionInputPending ? (
-                  <p className="mt-1 text-xs text-slate-400">Filtrando…</p>
-                ) : sectionInputUnknown ? (
-                  <p className="mt-1 text-xs text-amber-700">Sección no encontrada</p>
-                ) : null}
-              </div>
-              <div>
-                <label className="label" htmlFor="map-filter-colonia">
-                  Colonia
-                </label>
-                <input
-                  id="map-filter-colonia"
-                  className="input"
-                  list="map-colonias-datalist"
-                  placeholder="Colonia del domicilio"
-                  value={mapFilters.colonia}
-                  onChange={(e) => setMapFilters((f) => ({ ...f, colonia: e.target.value }))}
-                />
-                <datalist id="map-colonias-datalist">
-                  {coloniasSorted.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
-              </div>
-            </div>
-          </MapFilterAccordion>
-
-          <MapFilterAccordion
-            title="Servicios operativos"
-            hint="Estatus, área D. SOCIAL, catálogo (p. ej. POSADA) y prioridad — capa de marcadores circulares"
-            badge={serviceFilterCount ? `${serviceFilterCount} activo${serviceFilterCount === 1 ? '' : 's'}` : null}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="label">Estatus</label>
-                <select
-                  className="input"
-                  value={mapFilters.status_code}
-                  onChange={(e) => setMapFilters((f) => ({ ...f, status_code: e.target.value }))}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s || 'all'} value={s}>
-                      {s || 'Todos'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Área operativa</label>
-                <select
-                  className="input"
-                  value={mapFilters.operational_area_id}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({
-                      ...f,
-                      operational_area_id: e.target.value,
-                      operational_area_offering_id: '',
-                    }))
-                  }
-                >
-                  <option value="">Todas</option>
-                  {areas.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Servicio (catálogo)</label>
-                <select
-                  className="input"
-                  value={mapFilters.operational_area_offering_id}
-                  disabled={!filterAreaIdNum}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({ ...f, operational_area_offering_id: e.target.value }))
-                  }
-                >
-                  <option value="">Todos en el área</option>
-                  {filterOfferings.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Prioridad</label>
-                <select
-                  className="input"
-                  value={mapFilters.priority}
-                  onChange={(e) => setMapFilters((f) => ({ ...f, priority: e.target.value }))}
-                >
-                  <option value="">Todas</option>
-                  {PRIORITY_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </MapFilterAccordion>
-
-          <MapFilterAccordion
-            title="Programas y apoyos"
-            hint="Filtra la capa de apoyos del mapa por programa o tipo; el color sale del apoyo"
-            badge={programFilterCount ? `${programFilterCount} activo${programFilterCount === 1 ? '' : 's'}` : null}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="label">Programa</label>
-                <select
-                  className="input"
-                  value={mapFilters.program_id}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({
-                      ...f,
-                      program_id: e.target.value,
-                      support_type_id: '',
-                    }))
-                  }
-                >
-                  <option value="">Todos los programas</option>
-                  {supportPrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Tipo de apoyo</label>
-                <select
-                  className="input"
-                  value={mapFilters.support_type_id}
-                  disabled={!programTypesFiltered.length}
-                  onChange={(e) =>
-                    setMapFilters((f) => ({ ...f, support_type_id: e.target.value }))
-                  }
-                >
-                  <option value="">
-                    {filterProgramIdNum ? 'Todos en el programa' : 'Todos los tipos'}
-                  </option>
-                  {programTypesFiltered.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </MapFilterAccordion>
-        </div>
-      </section>
-
-      <MapFilterAccordion
-        title="Resumen estadístico"
-        hint="Totales y desglose territorial → sección → colonia según los filtros activos"
-        defaultOpen={false}
-        badge={
-          statsQuery.isPending
-            ? '…'
-            : `${fmtStat(stats?.citizens)} civ. · ${fmtStat(stats?.services)} svc. · ${fmtStat(stats?.supports)} apoyos`
-        }
-      >
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
-              <p className="text-xs text-slate-500">Ciudadanos geolocalizados</p>
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-2.5 px-3">
+              <p className="text-xs text-slate-500">Ciudadanos</p>
               <p className="text-lg font-semibold text-slate-800">
                 {statsQuery.isPending ? '…' : fmtStat(stats?.citizens)}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-2.5 px-3">
               <p className="text-xs text-slate-500">Servicios</p>
               <p className="text-lg font-semibold text-slate-800">
                 {statsQuery.isPending ? '…' : fmtStat(stats?.services)}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-2.5 px-3">
               <p className="text-xs text-slate-500">Apoyos</p>
               <p className="text-lg font-semibold text-slate-800">
                 {statsQuery.isPending ? '…' : fmtStat(stats?.supports)}
               </p>
             </div>
-            <div className="rounded-lg border border-slate-100 bg-slate-50/80 py-3 px-4">
-              <p className="text-xs text-slate-500">Desglose</p>
-              <p className="text-lg font-semibold text-slate-800 capitalize">
-                {statsQuery.isPending ? '…' : groupLevelLabel}
-              </p>
-            </div>
           </div>
 
           {(stats?.by_status?.length > 0 || stats?.by_program?.length > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-2.5">
               {stats?.by_status?.length > 0 && (
                 <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <div className="border-b border-slate-100 px-4 py-2">
+                  <div className="border-b border-slate-100 px-3 py-2">
                     <h4 className="text-sm font-semibold text-slate-700">Servicios por estatus</h4>
                   </div>
                   <ul className="divide-y divide-slate-100 text-sm">
                     {stats.by_status.map((row) => (
-                      <li key={row.status_code} className="flex items-center justify-between gap-3 px-4 py-2">
+                      <li
+                        key={row.status_code}
+                        className="flex items-center justify-between gap-3 px-3 py-2"
+                      >
                         <span className="inline-flex items-center gap-2 text-slate-700">
                           <span
                             className="inline-block h-2.5 w-2.5 rounded-full"
@@ -951,14 +963,14 @@ export default function MapPage() {
               )}
               {stats?.by_program?.length > 0 && (
                 <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <div className="border-b border-slate-100 px-4 py-2">
+                  <div className="border-b border-slate-100 px-3 py-2">
                     <h4 className="text-sm font-semibold text-slate-700">Apoyos por programa</h4>
                   </div>
                   <ul className="divide-y divide-slate-100 text-sm">
                     {stats.by_program.map((row) => (
                       <li
                         key={row.program_id ?? row.program_name}
-                        className="flex items-center justify-between gap-3 px-4 py-2"
+                        className="flex items-center justify-between gap-3 px-3 py-2"
                       >
                         <span className="inline-flex items-center gap-2 min-w-0 text-slate-700">
                           <span
@@ -977,17 +989,15 @@ export default function MapPage() {
           )}
 
           <div className="overflow-hidden rounded-lg border border-slate-100">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
-              <h4 className="text-sm font-semibold text-slate-700">
-                Desglose {groupLevelLabel}
-              </h4>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+              <h4 className="text-sm font-semibold text-slate-700">Desglose {groupLevelLabel}</h4>
               <span className="text-xs text-slate-500">
                 {statsQuery.isPending
                   ? 'Calculando…'
                   : `${fmtStat(stats?.groups?.length || 0)} grupo${(stats?.groups?.length || 0) === 1 ? '' : 's'}`}
               </span>
             </div>
-            <div className="max-h-56 overflow-auto">
+            <div className="max-h-48 overflow-auto">
               <table className="min-w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50 text-left text-slate-600 border-b border-slate-200">
                   <tr>
@@ -1026,8 +1036,8 @@ export default function MapPage() {
               </table>
             </div>
           </div>
-        </div>
-      </MapFilterAccordion>
+        </section>
+      </div>
 
       <div className="legend flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         <span className="font-medium text-slate-700">Leyenda estatus:</span>
@@ -1062,7 +1072,7 @@ export default function MapPage() {
 
       <div
         className="card relative overflow-hidden p-0"
-        style={{ height: 'calc(100vh - 280px)', minHeight: 360 }}
+        style={{ height: 'calc(100vh - 220px)', minHeight: 360 }}
       >
         {(sectionsQuery.isPending ||
           servicesQuery.isPending ||
