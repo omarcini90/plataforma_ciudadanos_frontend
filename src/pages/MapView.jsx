@@ -18,6 +18,24 @@ function getGoogleMapsBrowserKey() {
   return String(import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '').trim();
 }
 
+function sectionHasTerritorial(seccion, territorialId) {
+  if (!territorialId) return true;
+  return (seccion.territorial_ids || []).map(Number).includes(Number(territorialId));
+}
+
+function featureHasTerritorial(feature, territorialId) {
+  if (!territorialId) return true;
+  const p = feature?.properties || {};
+  const ids = Array.isArray(p.territorial_ids) ? p.territorial_ids.map(Number) : [];
+  if (ids.length) return ids.includes(Number(territorialId));
+  return Number(p.id_territorial) === Number(territorialId);
+}
+
+function featureHasDistrito(feature, distrito) {
+  if (!distrito) return true;
+  return Number(feature?.properties?.distrito) === Number(distrito);
+}
+
 /** `google-js`: API oficial con clave. `google-raster`: teselas XYZ como en muchos ejemplos de Folium, sin clave. */
 function useMapBasemapConfig() {
   const googleKey = getGoogleMapsBrowserKey();
@@ -263,6 +281,7 @@ export default function MapPage() {
     curp: '',
     status_code: '',
     municipio: '',
+    distrito: '',
     territorial_id: '',
     seccion_electoral: '',
     colonia: '',
@@ -343,6 +362,7 @@ export default function MapPage() {
     [colonias],
   );
 
+  const filterDistritoNum = mapFilters.distrito ? Number(mapFilters.distrito) : null;
   const filterTerritorialIdNum = mapFilters.territorial_id
     ? Number(mapFilters.territorial_id)
     : null;
@@ -364,6 +384,7 @@ export default function MapPage() {
     if (mapFilters.status_code) p.status_code = mapFilters.status_code;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
     if (mapFilters.operational_area_offering_id)
@@ -382,6 +403,7 @@ export default function MapPage() {
     mapFilters.operational_area_offering_id,
     mapFilters.priority,
     filterAreaIdNum,
+    filterDistritoNum,
     filterTerritorialIdNum,
   ]);
 
@@ -418,6 +440,7 @@ export default function MapPage() {
     if (debouncedCurp) p.curp = debouncedCurp;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
     const col = mapFilters.colonia.trim();
@@ -430,6 +453,7 @@ export default function MapPage() {
     debouncedSeccion,
     mapFilters.municipio,
     mapFilters.colonia,
+    filterDistritoNum,
     filterTerritorialIdNum,
     filterProgramIdNum,
     filterSupportTypeIdNum,
@@ -447,6 +471,7 @@ export default function MapPage() {
     if (mapFilters.status_code) p.status_code = mapFilters.status_code;
     const m = mapFilters.municipio.trim();
     if (m) p.municipio = m;
+    if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
     const col = mapFilters.colonia.trim();
@@ -467,6 +492,7 @@ export default function MapPage() {
     mapFilters.operational_area_offering_id,
     mapFilters.priority,
     filterAreaIdNum,
+    filterDistritoNum,
     filterTerritorialIdNum,
     filterProgramIdNum,
     filterSupportTypeIdNum,
@@ -482,6 +508,7 @@ export default function MapPage() {
     Boolean(debouncedCurp) ||
     Boolean(mapFilters.status_code) ||
     Boolean(mapFilters.municipio.trim()) ||
+    Boolean(filterDistritoNum) ||
     Boolean(filterTerritorialIdNum) ||
     Boolean(debouncedSeccion) ||
     Boolean(mapFilters.seccion_electoral.trim()) ||
@@ -495,6 +522,7 @@ export default function MapPage() {
   const locationFilterCount =
     Number(Boolean(debouncedCurp || mapFilters.curp.trim())) +
     Number(Boolean(mapFilters.municipio.trim())) +
+    Number(Boolean(filterDistritoNum)) +
     Number(Boolean(filterTerritorialIdNum)) +
     Number(Boolean(debouncedSeccion || mapFilters.seccion_electoral.trim())) +
     Number(Boolean(mapFilters.colonia.trim()));
@@ -511,6 +539,7 @@ export default function MapPage() {
       curp: '',
       status_code: '',
       municipio: '',
+      distrito: '',
       territorial_id: '',
       seccion_electoral: '',
       colonia: '',
@@ -535,28 +564,43 @@ export default function MapPage() {
   const sectionFilterNum = sectionFilter ? Number(sectionFilter) : null;
   const sectionInputPending = Boolean(sectionInput) && sectionInput !== sectionFilter;
 
-  const seccionesForTerritorial = useMemo(() => {
-    if (!filterTerritorialIdNum || !sectionsGeo?.features?.length) return seccionesSorted;
-    const tid = String(filterTerritorialIdNum);
-    const ids = new Set();
-    for (const f of sectionsGeo.features) {
-      const p = f.properties || {};
-      if (String(p.id_territorial ?? '') === tid) {
-        const code = String(p.code ?? p.seccion_id ?? p.id_seccion ?? '');
-        if (code) ids.add(code);
+  const distritosSorted = useMemo(() => {
+    const ids = [
+      ...new Set(seccionesSorted.map((s) => s.distrito).filter((d) => d != null)),
+    ];
+    return ids.sort((a, b) => a - b);
+  }, [seccionesSorted]);
+
+  const territorialesForFilters = useMemo(() => {
+    if (!filterDistritoNum) return territorialesSorted;
+    const allowed = new Set();
+    for (const s of seccionesSorted) {
+      if (s.distrito === filterDistritoNum) {
+        for (const id of s.territorial_ids || []) allowed.add(Number(id));
       }
     }
-    if (!ids.size) return seccionesSorted;
-    return seccionesSorted.filter((s) => ids.has(String(s.id)));
-  }, [filterTerritorialIdNum, sectionsGeo, seccionesSorted]);
+    return territorialesSorted.filter((t) => allowed.has(Number(t.id)));
+  }, [filterDistritoNum, seccionesSorted, territorialesSorted]);
+
+  const seccionesForTerritorial = useMemo(() => {
+    return seccionesSorted.filter((s) => {
+      if (filterDistritoNum && s.distrito !== filterDistritoNum) return false;
+      if (filterTerritorialIdNum && !sectionHasTerritorial(s, filterTerritorialIdNum)) {
+        return false;
+      }
+      return true;
+    });
+  }, [filterDistritoNum, filterTerritorialIdNum, seccionesSorted]);
 
   const visibleSectionsGeo = useMemo(() => {
     if (!sectionsGeo?.features?.length) return sectionsGeo;
 
     let features = sectionsGeo.features;
+    if (filterDistritoNum) {
+      features = features.filter((f) => featureHasDistrito(f, filterDistritoNum));
+    }
     if (filterTerritorialIdNum) {
-      const tid = String(filterTerritorialIdNum);
-      features = features.filter((f) => String(f.properties?.id_territorial ?? '') === tid);
+      features = features.filter((f) => featureHasTerritorial(f, filterTerritorialIdNum));
     }
     if (sectionFilter) {
       features = features.filter((f) => {
@@ -570,7 +614,7 @@ export default function MapPage() {
     }
 
     return { ...sectionsGeo, features };
-  }, [sectionsGeo, sectionFilter, sectionFilterNum, filterTerritorialIdNum]);
+  }, [sectionsGeo, sectionFilter, sectionFilterNum, filterDistritoNum, filterTerritorialIdNum]);
 
   const programLegendItems = useMemo(() => {
     const byType = new Map();
@@ -603,6 +647,7 @@ export default function MapPage() {
     Boolean(sectionFilter) && !seccionIdSet.has(sectionFilter) && visibleSectionCount === 0;
   const showSectionPolygons =
     Boolean(sectionFilter) ||
+    Boolean(filterDistritoNum) ||
     Boolean(filterTerritorialIdNum) ||
     (showSections && visibleSectionCount > 0);
 
@@ -688,7 +733,7 @@ export default function MapPage() {
           <div className="space-y-2">
             <MapFilterAccordion
               title="Ubicación y ciudadano"
-              hint="CURP, municipio, territorial, sección, colonia"
+              hint="CURP, municipio, distrito, territorial, sección, colonia"
               defaultOpen={locationFilterCount > 0}
               badge={
                 locationFilterCount
@@ -717,6 +762,31 @@ export default function MapPage() {
                   />
                 </div>
                 <div>
+                  <label className="label" htmlFor="map-filter-distrito">
+                    Distrito
+                  </label>
+                  <select
+                    id="map-filter-distrito"
+                    className="input"
+                    value={mapFilters.distrito}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({
+                        ...f,
+                        distrito: e.target.value,
+                        territorial_id: '',
+                        seccion_electoral: '',
+                      }))
+                    }
+                  >
+                    <option value="">Todos</option>
+                    {distritosSorted.map((d) => (
+                      <option key={d} value={d}>
+                        Distrito {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="label" htmlFor="map-filter-territorial">
                     Territorial
                   </label>
@@ -732,8 +802,8 @@ export default function MapPage() {
                       }))
                     }
                   >
-                    <option value="">Todos</option>
-                    {territorialesSorted.map((t) => (
+                    <option value="">Todas</option>
+                    {territorialesForFilters.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name || `Territorial ${t.id}`}
                       </option>

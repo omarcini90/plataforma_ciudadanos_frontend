@@ -74,9 +74,12 @@ export const catalogsApi = {
   deleteColonia: (id) => api.delete(`/catalogs/colonias/${id}`),
 
   /** Tabla fuente `secciones` (FK de `c_coordinates.IDSeccion`). */
-  secciones: () => api.get('/catalogs/secciones').then((r) => r.data),
+  secciones: (params) => api.get('/catalogs/secciones', { params }).then((r) => r.data),
   createSeccion: (p) => api.post('/catalogs/secciones', p).then((r) => r.data),
   deleteSeccion: (id) => api.delete(`/catalogs/secciones/${id}`),
+
+  /** Distritos derivados de `secciones.distrito`. */
+  distritos: () => api.get('/catalogs/distritos').then((r) => r.data),
 
   /** Tabla fuente `territoriales`. */
   territoriales: () => api.get('/catalogs/territoriales').then((r) => r.data),

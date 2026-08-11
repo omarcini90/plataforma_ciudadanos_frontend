@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -1243,8 +1243,38 @@ function SeccionesCrud() {
     queryFn: () => catalogsApi.secciones(),
   });
 
+  const { data: territoriales = [] } = useQuery({
+    queryKey: ['catalogs', 'territoriales-table'],
+    queryFn: () => catalogsApi.territoriales(),
+  });
+
   const [newId, setNewId] = useState('');
   const [seccionModalOpen, setSeccionModalOpen] = useState(false);
+  const [filterDistrito, setFilterDistrito] = useState('');
+  const [filterTerritorial, setFilterTerritorial] = useState('');
+
+  const territorialNameById = useMemo(() => {
+    const map = new Map();
+    for (const t of territoriales) map.set(Number(t.id), t.name || `Territorial ${t.id}`);
+    return map;
+  }, [territoriales]);
+
+  const distritos = useMemo(() => {
+    const ids = [...new Set(data.map((s) => s.distrito).filter((d) => d != null))];
+    return ids.sort((a, b) => a - b);
+  }, [data]);
+
+  const filteredSecciones = useMemo(() => {
+    const distritoNum = filterDistrito ? Number(filterDistrito) : null;
+    const territorialNum = filterTerritorial ? Number(filterTerritorial) : null;
+    return data.filter((s) => {
+      if (distritoNum && s.distrito !== distritoNum) return false;
+      if (territorialNum && !(s.territorial_ids || []).map(Number).includes(territorialNum)) {
+        return false;
+      }
+      return true;
+    });
+  }, [data, filterDistrito, filterTerritorial]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qk });
 
@@ -1272,8 +1302,8 @@ function SeccionesCrud() {
         <div>
           <h3 className="font-semibold text-slate-800">Secciones</h3>
           <p className="text-sm text-slate-500 mt-1">
-            Listado desde la tabla <code className="text-xs bg-slate-100 px-1 rounded">secciones</code>.
-            Cada fila es solo el número de sección (coincide con ciudadanos / INE).
+            Listado desde la tabla <code className="text-xs bg-slate-100 px-1 rounded">secciones</code>
+            {' '}con distrito y territoriales (origen VC_PROD).
           </p>
         </div>
         <BtnPrimaryIcon
@@ -1328,11 +1358,46 @@ function SeccionesCrud() {
         </CatalogModal>
       )}
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div>
+          <label className="label">Distrito</label>
+          <select
+            className="input"
+            value={filterDistrito}
+            onChange={(e) => setFilterDistrito(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {distritos.map((d) => (
+              <option key={d} value={d}>
+                Distrito {d}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Territorial</label>
+          <select
+            className="input"
+            value={filterTerritorial}
+            onChange={(e) => setFilterTerritorial(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {territoriales.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name || `Territorial ${t.id}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="text-left text-slate-600 border-b">
             <tr>
               <th className="px-3 py-2">Id sección</th>
+              <th className="px-3 py-2">Distrito</th>
+              <th className="px-3 py-2">Territoriales</th>
               <th className="px-3 py-2 w-[88px] text-center text-slate-500" title="Acciones">
                 <span className="sr-only">Acciones</span>
                 <IconTrash size={16} stroke={1.5} className="inline opacity-40" aria-hidden />
@@ -1342,15 +1407,21 @@ function SeccionesCrud() {
           <tbody className="divide-y">
             {isLoading && (
               <tr>
-                <td colSpan={2} className="px-3 py-4 text-slate-500">
+                <td colSpan={4} className="px-3 py-4 text-slate-500">
                   Cargando…
                 </td>
               </tr>
             )}
             {!isLoading &&
-              data.map((row) => (
+              filteredSecciones.map((row) => (
                 <tr key={row.id}>
                   <td className="px-3 py-2 font-mono">{row.id}</td>
+                  <td className="px-3 py-2">{row.distrito ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {(row.territorial_ids || [])
+                      .map((id) => territorialNameById.get(Number(id)) || id)
+                      .join(', ') || '—'}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end">
                       <DeleteIconButton
@@ -1527,6 +1598,7 @@ function TerritorialesCrud() {
             <tr>
               <th className="px-3 py-2 w-24">Id</th>
               <th className="px-3 py-2">Nombre</th>
+              <th className="px-3 py-2 w-28">Secciones</th>
               <th className="px-3 py-2 w-[120px] text-center text-slate-500" title="Acciones">
                 <span className="sr-only">Acciones</span>
                 <IconPencil size={16} stroke={1.5} className="inline opacity-40" aria-hidden />
@@ -1536,7 +1608,7 @@ function TerritorialesCrud() {
           <tbody className="divide-y">
             {isLoading && (
               <tr>
-                <td colSpan={3} className="px-3 py-4 text-slate-500">
+                <td colSpan={4} className="px-3 py-4 text-slate-500">
                   Cargando…
                 </td>
               </tr>
@@ -1546,6 +1618,7 @@ function TerritorialesCrud() {
                 <tr key={t.id}>
                   <td className="px-3 py-2 font-mono text-xs">{t.id}</td>
                   <td className="px-3 py-2">{t.name || '—'}</td>
+                  <td className="px-3 py-2">{(t.seccion_ids || []).length}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-1">
                       <EditIconButton

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GeoJSON, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { votingsApi } from '../../api/index.js';
+import { catalogsApi, votingsApi } from '../../api/index.js';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -170,8 +170,18 @@ function buildPartyPopup(seccionId, voting) {
   </div>`;
 }
 
+function featureHasTerritorial(feature, territorialId) {
+  if (!territorialId) return true;
+  const p = feature?.properties || {};
+  const ids = Array.isArray(p.territorial_ids) ? p.territorial_ids.map(Number) : [];
+  if (ids.length) return ids.includes(Number(territorialId));
+  return Number(p.id_territorial) === Number(territorialId);
+}
+
 export default function VotingMapPage({ year, title, subtitle }) {
   const [seccionFilter, setSeccionFilter] = useState('');
+  const [distritoFilter, setDistritoFilter] = useState('');
+  const [territorialFilter, setTerritorialFilter] = useState('');
   const [layerMode, setLayerMode] = useState('margin');
 
   const mapSectionsQuery = useQuery({
@@ -188,6 +198,40 @@ export default function VotingMapPage({ year, title, subtitle }) {
     queryKey: ['votings', 'sections-geojson'],
     queryFn: () => votingsApi.sectionsGeoJson(),
   });
+
+  const { data: secciones = [] } = useQuery({
+    queryKey: ['catalogs', 'secciones'],
+    queryFn: () => catalogsApi.secciones(),
+    staleTime: 120_000,
+  });
+
+  const { data: territoriales = [] } = useQuery({
+    queryKey: ['catalogs', 'territoriales'],
+    queryFn: () => catalogsApi.territoriales(),
+    staleTime: 120_000,
+  });
+
+  const filterDistritoNum = distritoFilter ? Number(distritoFilter) : null;
+  const filterTerritorialIdNum = territorialFilter ? Number(territorialFilter) : null;
+
+  const distritosSorted = useMemo(() => {
+    const ids = [...new Set(secciones.map((s) => s.distrito).filter((d) => d != null))];
+    return ids.sort((a, b) => a - b);
+  }, [secciones]);
+
+  const territorialesSorted = useMemo(() => {
+    const list = [...territoriales].sort((a, b) =>
+      String(a.name || a.id).localeCompare(String(b.name || b.id), 'es'),
+    );
+    if (!filterDistritoNum) return list;
+    const allowed = new Set();
+    for (const s of secciones) {
+      if (s.distrito === filterDistritoNum) {
+        for (const id of s.territorial_ids || []) allowed.add(Number(id));
+      }
+    }
+    return list.filter((t) => allowed.has(Number(t.id)));
+  }, [territoriales, secciones, filterDistritoNum]);
 
   const votingBySeccion = useMemo(() => {
     const map = new Map();
@@ -249,12 +293,24 @@ export default function VotingMapPage({ year, title, subtitle }) {
         };
       })
       .filter((feature) => {
+        if (filterDistritoNum && Number(feature.properties?.distrito) !== filterDistritoNum) {
+          return false;
+        }
+        if (filterTerritorialIdNum && !featureHasTerritorial(feature, filterTerritorialIdNum)) {
+          return false;
+        }
         if (!filterNum) return true;
         return feature.properties?.seccion_id === filterNum;
       });
 
     return { ...base, features };
-  }, [sectionsGeoQuery.data, votingBySeccion, filterNum]);
+  }, [
+    sectionsGeoQuery.data,
+    votingBySeccion,
+    filterNum,
+    filterDistritoNum,
+    filterTerritorialIdNum,
+  ]);
 
   const styleFeature = (feature) => {
     const seccionId = resolveSeccionId(feature?.properties);
@@ -356,6 +412,43 @@ export default function VotingMapPage({ year, title, subtitle }) {
           </select>
         </label>
         <label className="text-sm">
+          <span className="block text-slate-600 mb-1">Distrito</span>
+          <select
+            className="input min-w-[9rem]"
+            value={distritoFilter}
+            onChange={(e) => {
+              setDistritoFilter(e.target.value);
+              setTerritorialFilter('');
+              setSeccionFilter('');
+            }}
+          >
+            <option value="">Todos</option>
+            {distritosSorted.map((d) => (
+              <option key={d} value={d}>
+                Distrito {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-slate-600 mb-1">Territorial</span>
+          <select
+            className="input min-w-[14rem]"
+            value={territorialFilter}
+            onChange={(e) => {
+              setTerritorialFilter(e.target.value);
+              setSeccionFilter('');
+            }}
+          >
+            <option value="">Todas</option>
+            {territorialesSorted.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name || `Territorial ${t.id}`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
           <span className="block text-slate-600 mb-1">Ir a sección</span>
           <input
             className="input w-28"
@@ -365,7 +458,15 @@ export default function VotingMapPage({ year, title, subtitle }) {
             onChange={(e) => setSeccionFilter(e.target.value.replace(/\D/g, ''))}
           />
         </label>
-        <button type="button" className="btn-secondary" onClick={() => setSeccionFilter('')}>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            setSeccionFilter('');
+            setDistritoFilter('');
+            setTerritorialFilter('');
+          }}
+        >
           Ver todas
         </button>
       </div>

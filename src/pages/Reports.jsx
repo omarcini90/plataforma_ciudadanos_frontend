@@ -9,6 +9,8 @@ import { catalogsApi, reportsApi, supportsApi } from '../api/index.js';
 const emptyFilters = {
   q: '',
   seccion_electoral: '',
+  distrito: '',
+  territorial_id: '',
   colonia: '',
   codigo_postal: '',
   program_id: '',
@@ -71,6 +73,8 @@ export default function ReportsPage() {
     const p = { page, page_size: pageSize };
     if (debouncedQ) p.q = debouncedQ;
     if (filters.seccion_electoral.trim()) p.seccion_electoral = filters.seccion_electoral.trim();
+    if (filters.distrito) p.distrito = Number(filters.distrito);
+    if (filters.territorial_id) p.territorial_id = Number(filters.territorial_id);
     if (filters.colonia.trim()) p.colonia = filters.colonia.trim();
     if (filters.codigo_postal.trim()) p.codigo_postal = filters.codigo_postal.trim();
     if (filterProgramIdNum) p.program_id = filterProgramIdNum;
@@ -85,6 +89,8 @@ export default function ReportsPage() {
     page,
     debouncedQ,
     filters.seccion_electoral,
+    filters.distrito,
+    filters.territorial_id,
     filters.colonia,
     filters.codigo_postal,
     filters.is_active,
@@ -141,10 +147,38 @@ export default function ReportsPage() {
     staleTime: 120_000,
   });
 
+  const { data: territoriales = [] } = useQuery({
+    queryKey: ['catalogs', 'territoriales'],
+    queryFn: () => catalogsApi.territoriales(),
+    staleTime: 120_000,
+  });
+
   const seccionesSorted = useMemo(
     () => [...secciones].sort((a, b) => a.id - b.id),
     [secciones],
   );
+
+  const distritosSorted = useMemo(() => {
+    const ids = [...new Set(secciones.map((s) => s.distrito).filter((d) => d != null))];
+    return ids.sort((a, b) => a - b);
+  }, [secciones]);
+
+  const filterDistritoNum = filters.distrito ? Number(filters.distrito) : null;
+  const filterTerritorialIdNum = filters.territorial_id ? Number(filters.territorial_id) : null;
+
+  const territorialesSorted = useMemo(() => {
+    const list = [...territoriales].sort((a, b) =>
+      String(a.name || a.id).localeCompare(String(b.name || b.id), 'es'),
+    );
+    if (!filterDistritoNum) return list;
+    const allowed = new Set();
+    for (const s of secciones) {
+      if (s.distrito === filterDistritoNum) {
+        for (const id of s.territorial_ids || []) allowed.add(Number(id));
+      }
+    }
+    return list.filter((t) => allowed.has(Number(t.id)));
+  }, [territoriales, secciones, filterDistritoNum]);
 
   const coloniasSorted = useMemo(
     () =>
@@ -161,6 +195,8 @@ export default function ReportsPage() {
 
   const hasActiveFilters =
     Boolean(debouncedQ || filters.q.trim()) ||
+    Boolean(filters.distrito) ||
+    Boolean(filters.territorial_id) ||
     Boolean(filters.seccion_electoral.trim()) ||
     Boolean(filters.colonia.trim()) ||
     Boolean(filters.codigo_postal.trim()) ||
@@ -220,7 +256,7 @@ export default function ReportsPage() {
           <div>
             <h3 className="font-semibold text-slate-800">Filtros</h3>
             <p className="text-sm text-slate-500">
-              Sección, programa, apoyo, servicio, colonia, CP, nombre o CURP.
+              Distrito, territorial, sección, programa, apoyo, servicio, colonia, CP, nombre o CURP.
             </p>
           </div>
           {hasActiveFilters && (
@@ -234,7 +270,7 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <FilterAccordion title="Búsqueda y ubicación" hint="Nombre/CURP, sección, colonia y CP">
+        <FilterAccordion title="Búsqueda y ubicación" hint="Nombre/CURP, distrito, territorial, sección, colonia y CP">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="sm:col-span-2">
               <label className="label">Nombre o CURP</label>
@@ -247,6 +283,51 @@ export default function ReportsPage() {
                   setPage(1);
                 }}
               />
+            </div>
+            <div>
+              <label className="label">Distrito</label>
+              <select
+                className="input"
+                value={filters.distrito}
+                onChange={(e) => {
+                  setFilters((f) => ({
+                    ...f,
+                    distrito: e.target.value,
+                    territorial_id: '',
+                    seccion_electoral: '',
+                  }));
+                  setPage(1);
+                }}
+              >
+                <option value="">Todos</option>
+                {distritosSorted.map((d) => (
+                  <option key={d} value={d}>
+                    Distrito {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Territorial</label>
+              <select
+                className="input"
+                value={filters.territorial_id}
+                onChange={(e) => {
+                  setFilters((f) => ({
+                    ...f,
+                    territorial_id: e.target.value,
+                    seccion_electoral: '',
+                  }));
+                  setPage(1);
+                }}
+              >
+                <option value="">Todas</option>
+                {territorialesSorted.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name || `Territorial ${t.id}`}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="label">Sección electoral</label>
@@ -265,9 +346,20 @@ export default function ReportsPage() {
                 }}
               />
               <datalist id="reports-secciones">
-                {seccionesSorted.map((s) => (
-                  <option key={s.id} value={String(s.id)} />
-                ))}
+                {seccionesSorted
+                  .filter((s) => {
+                    if (filterDistritoNum && s.distrito !== filterDistritoNum) return false;
+                    if (
+                      filterTerritorialIdNum &&
+                      !(s.territorial_ids || []).map(Number).includes(filterTerritorialIdNum)
+                    ) {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .map((s) => (
+                    <option key={s.id} value={String(s.id)} />
+                  ))}
               </datalist>
             </div>
             <div>
@@ -423,6 +515,7 @@ export default function ReportsPage() {
               <th className="px-3 py-2">CURP</th>
               <th className="px-3 py-2">Nombre</th>
               <th className="px-3 py-2">Sección</th>
+              <th className="px-3 py-2">Distrito</th>
               <th className="px-3 py-2">Colonia</th>
               <th className="px-3 py-2">CP</th>
               <th className="px-3 py-2">Programas</th>
@@ -434,13 +527,13 @@ export default function ReportsPage() {
           <tbody className="divide-y divide-slate-200">
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                   Cargando…
                 </td>
               </tr>
             ) : !data?.items?.length ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                   Sin resultados para los filtros actuales.
                 </td>
               </tr>
@@ -452,6 +545,7 @@ export default function ReportsPage() {
                     {c.nombre} {c.apellido_paterno} {c.apellido_materno || ''}
                   </td>
                   <td className="px-3 py-2">{c.seccion_electoral || '—'}</td>
+                  <td className="px-3 py-2">{c.distrito ?? '—'}</td>
                   <td className="px-3 py-2">{c.colonia || '—'}</td>
                   <td className="px-3 py-2">{c.codigo_postal || '—'}</td>
                   <td className="px-3 py-2 max-w-[10rem] truncate" title={c.programs_summary || ''}>
