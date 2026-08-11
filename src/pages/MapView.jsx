@@ -150,6 +150,24 @@ const buildProgramMarkerIcon = (color = PROGRAM_MARKER_COLOR) =>
     iconAnchor: [7, 7],
   });
 
+/** Tinte suave a partir de un hex (#rgb / #rrggbb) para sombrear filas de apoyos. */
+function hexToTint(hex, alpha = 0.22) {
+  const raw = String(hex || '').replace('#', '').trim();
+  if (!raw) return `rgba(124, 58, 237, ${alpha})`;
+  const full =
+    raw.length === 3
+      ? raw
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : raw.slice(0, 6);
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return `rgba(124, 58, 237, ${alpha})`;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** Rectángulo mínimo que contiene todos los anillos exteriores de las secciones (polígono “global” para encuadre). */
 function boundsFromAllSectionPolygons(geoJson) {
   const bounds = L.latLngBounds([]);
@@ -965,23 +983,51 @@ export default function MapPage() {
                 <div className="overflow-hidden rounded-lg border border-slate-100">
                   <div className="border-b border-slate-100 px-3 py-2">
                     <h4 className="text-sm font-semibold text-slate-700">Apoyos por programa</h4>
+                    <p className="text-xs text-slate-500">Clic para filtrar el mapa</p>
                   </div>
-                  <ul className="divide-y divide-slate-100 text-sm">
-                    {stats.by_program.map((row) => (
-                      <li
-                        key={row.program_id ?? row.program_name}
-                        className="flex items-center justify-between gap-3 px-3 py-2"
-                      >
-                        <span className="inline-flex items-center gap-2 min-w-0 text-slate-700">
-                          <span
-                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                            style={{ background: row.color || PROGRAM_MARKER_COLOR }}
-                          />
-                          <span className="truncate">{row.program_name}</span>
-                        </span>
-                        <span className="font-medium text-slate-800">{fmtStat(row.count)}</span>
-                      </li>
-                    ))}
+                  <ul className="divide-y divide-slate-100/80 text-sm">
+                    {stats.by_program.map((row) => {
+                      const color = row.color || PROGRAM_MARKER_COLOR;
+                      const programId = row.program_id != null ? String(row.program_id) : '';
+                      const selected =
+                        Boolean(programId) && String(mapFilters.program_id) === programId;
+                      return (
+                        <li key={row.program_id ?? row.program_name}>
+                          <button
+                            type="button"
+                            disabled={!programId}
+                            title={
+                              selected
+                                ? 'Quitar filtro de programa'
+                                : 'Filtrar mapa por este programa'
+                            }
+                            onClick={() => {
+                              if (!programId) return;
+                              setShowPrograms(true);
+                              setMapFilters((f) => ({
+                                ...f,
+                                program_id: f.program_id === programId ? '' : programId,
+                                support_type_id: '',
+                              }));
+                            }}
+                            className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:brightness-95 disabled:cursor-default ${
+                              selected ? 'ring-2 ring-inset ring-brand-600' : ''
+                            }`}
+                            style={{
+                              background: hexToTint(color, selected ? 0.38 : 0.2),
+                              borderLeft: `4px solid ${color}`,
+                            }}
+                          >
+                            <span className="min-w-0 truncate font-medium text-slate-800">
+                              {row.program_name}
+                            </span>
+                            <span className="shrink-0 font-semibold text-slate-900">
+                              {fmtStat(row.count)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
@@ -1051,20 +1097,25 @@ export default function MapPage() {
         <span className="font-medium text-slate-700">Apoyos:</span>
         {programLegendItems.length ? (
           programLegendItems.map((item) => (
-            <span key={item.key} className="inline-flex items-center gap-1">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm border border-white shadow"
-                style={{ background: item.color }}
-              />
+            <span
+              key={item.key}
+              className="inline-flex items-center rounded px-1.5 py-0.5 font-medium text-slate-800"
+              style={{
+                background: hexToTint(item.color, 0.28),
+                borderLeft: `3px solid ${item.color}`,
+              }}
+            >
               {item.label}
             </span>
           ))
         ) : (
-          <span className="inline-flex items-center gap-1">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-sm border border-white shadow"
-              style={{ background: PROGRAM_MARKER_COLOR }}
-            />
+          <span
+            className="inline-flex items-center rounded px-1.5 py-0.5 font-medium text-slate-800"
+            style={{
+              background: hexToTint(PROGRAM_MARKER_COLOR, 0.28),
+              borderLeft: `3px solid ${PROGRAM_MARKER_COLOR}`,
+            }}
+          >
             Apoyo / programa
           </span>
         )}
