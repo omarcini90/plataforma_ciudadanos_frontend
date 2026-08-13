@@ -51,6 +51,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    const u = await authApi.me();
+    const mapped = normalizeUser(u);
+    setUser(mapped);
+    localStorage.setItem('user', JSON.stringify(mapped));
+    return mapped;
+  };
+
   const hasRole = (...roles) =>
     !!user && roles.map((r) => r.toUpperCase()).includes((user.role || '').toUpperCase());
 
@@ -63,7 +71,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, logout, hasRole, hasPermission }}
+      value={{ user, token, loading, login, logout, refreshUser, hasRole, hasPermission }}
     >
       {children}
     </AuthContext.Provider>

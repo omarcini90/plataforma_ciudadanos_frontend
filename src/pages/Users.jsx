@@ -66,7 +66,7 @@ function MultiAreaSelect({ areas, value, onChange }) {
 
 export default function UsersPage() {
   const qc = useQueryClient();
-  const { hasPermission } = useAuth();
+  const { user: currentUser, hasPermission, refreshUser } = useAuth();
   const canManageUsers = hasPermission('users.write');
   const canReadRoles = hasPermission('roles.read', 'roles.write', 'users.write');
   const canManageRoles = hasPermission('roles.write');
@@ -166,11 +166,7 @@ export default function UsersPage() {
   }, [permissions, permissionFilter]);
 
   const createUser = useMutation({
-    mutationFn: () =>
-      usersApi.create({
-        ...userForm,
-        role_id: Number(userForm.role_id),
-      }),
+    mutationFn: (payload) => usersApi.create(payload),
     onSuccess: () => {
       toast.success('Usuario creado');
       setUserDrawerOpen(false);
@@ -180,23 +176,32 @@ export default function UsersPage() {
     onError: (err) => toast.error(err.response?.data?.detail || 'Error al crear usuario'),
   });
 
+  const patchUsersCache = (updated) => {
+    qc.setQueryData(['users'], (old) => {
+      if (!old?.items) return old;
+      return {
+        ...old,
+        items: old.items.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)),
+      };
+    });
+  };
+
   const updateUser = useMutation({
-    mutationFn: () =>
-      usersApi.update(editingUserId, {
-        full_name: userForm.full_name,
-        email: userForm.email,
-        username: userForm.username,
-        role_id: Number(userForm.role_id),
-        operational_area_ids: userForm.operational_area_ids,
-        is_active: userForm.is_active,
-        ...(userForm.password ? { password: userForm.password } : {}),
-      }),
-    onSuccess: () => {
+    mutationFn: ({ id, payload }) => usersApi.update(id, payload),
+    onSuccess: async (updated) => {
       toast.success('Usuario actualizado');
       setUserDrawerOpen(false);
       setEditingUserId(null);
       setUserForm(emptyUser);
-      qc.invalidateQueries({ queryKey: ['users'] });
+      patchUsersCache(updated);
+      await qc.invalidateQueries({ queryKey: ['users'] });
+      if (currentUser?.id === updated.id) {
+        try {
+          await refreshUser();
+        } catch {
+          /* el listado ya quedó actualizado */
+        }
+      }
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Error al actualizar'),
   });
@@ -687,7 +692,22 @@ export default function UsersPage() {
               !userForm.role_id ||
               (!editingUserId && !userForm.password)
             }
-            onClick={() => (editingUserId ? updateUser.mutate() : createUser.mutate())}
+            onClick={() => {
+              const payload = {
+                full_name: userForm.full_name.trim(),
+                email: userForm.email.trim(),
+                username: userForm.username.trim(),
+                role_id: Number(userForm.role_id),
+                operational_area_ids: userForm.operational_area_ids || [],
+                is_active: Boolean(userForm.is_active),
+                ...(userForm.password ? { password: userForm.password } : {}),
+              };
+              if (editingUserId) {
+                updateUser.mutate({ id: editingUserId, payload });
+              } else {
+                createUser.mutate(payload);
+              }
+            }}
           >
             {editingUserId ? 'Guardar cambios' : 'Crear usuario'}
           </button>
