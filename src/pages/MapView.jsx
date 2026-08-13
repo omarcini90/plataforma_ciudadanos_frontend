@@ -616,20 +616,6 @@ export default function MapPage() {
     return { ...sectionsGeo, features };
   }, [sectionsGeo, sectionFilter, sectionFilterNum, filterDistritoNum, filterTerritorialIdNum]);
 
-  const programLegendItems = useMemo(() => {
-    const byType = new Map();
-    for (const m of mapProgramMarkers) {
-      const key = m.support_type_id ?? `p-${m.program_id ?? 'x'}`;
-      if (byType.has(key)) continue;
-      byType.set(key, {
-        key,
-        label: m.support_type_name || m.program_name || 'Apoyo',
-        color: m.color || PROGRAM_MARKER_COLOR,
-      });
-    }
-    return [...byType.values()].slice(0, 12);
-  }, [mapProgramMarkers]);
-
   const stats = statsQuery.data;
   const groupLevelLabel =
     stats?.group_level === 'colonia'
@@ -1161,42 +1147,6 @@ export default function MapPage() {
             </div>
           </div>
         </section>
-      </div>
-
-      <div className="legend flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-        <span className="font-medium text-slate-700">Leyenda estatus:</span>
-        {Object.entries(STATUS_HEX).map(([code, hex]) => (
-          <span key={code} className="inline-flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-full border border-white shadow" style={{ background: hex }} />
-            {code.replace('_', ' ')}
-          </span>
-        ))}
-        <span className="mx-1 text-slate-300">|</span>
-        <span className="font-medium text-slate-700">Apoyos:</span>
-        {programLegendItems.length ? (
-          programLegendItems.map((item) => (
-            <span
-              key={item.key}
-              className="inline-flex items-center rounded px-1.5 py-0.5 font-medium text-slate-800"
-              style={{
-                background: hexToTint(item.color, 0.28),
-                borderLeft: `3px solid ${item.color}`,
-              }}
-            >
-              {item.label}
-            </span>
-          ))
-        ) : (
-          <span
-            className="inline-flex items-center rounded px-1.5 py-0.5 font-medium text-slate-800"
-            style={{
-              background: hexToTint(PROGRAM_MARKER_COLOR, 0.28),
-              borderLeft: `3px solid ${PROGRAM_MARKER_COLOR}`,
-            }}
-          >
-            Apoyo / programa
-          </span>
-        )}
       </div>
 
       <div
