@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import CitizenFichaPanel from '../components/CitizenFichaPanel.jsx';
 import SlidePanel from '../components/SlidePanel.jsx';
@@ -8,6 +8,9 @@ import L from 'leaflet';
 import { catalogsApi, mapsApi, supportsApi } from '../api/index.js';
 
 import 'leaflet/dist/leaflet.css';
+
+/** Un solo canvas para polígonos: mucho más barato que miles de SVG paths. */
+const SECTION_CANVAS_RENDERER = L.canvas({ padding: 0.5 });
 
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
@@ -145,36 +148,64 @@ const STATUS_HEX = {
 
 const SECTION_STYLE = {
   color: '#4338ca',
-  weight: 2,
+  weight: 1.5,
   fillColor: '#818cf8',
-  fillOpacity: 0.18,
+  fillOpacity: 0.14,
+  renderer: SECTION_CANVAS_RENDERER,
 };
-
-const buildIcon = (color = '#753232') =>
-  L.divIcon({
-    className: '',
-    html: `<div style="width:18px;height:18px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 0 0 1px ${color}"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-  });
 
 const PROGRAM_MARKER_COLOR = '#7c3aed';
 
-/** Clustering normal a vista amplia; se desactiva al filtrar por sección. */
+/** Clustering siempre activo (incluye filtro por sección) para no montar miles de Marker sueltos. */
 const CLUSTER_OPTIONS = {
   chunkedLoading: true,
+  chunkInterval: 50,
+  chunkDelay: 25,
   maxClusterRadius: 80,
   showCoverageOnHover: false,
   spiderfyOnMaxZoom: true,
+  removeOutsideVisibleBounds: true,
 };
 
-const buildProgramMarkerIcon = (color = PROGRAM_MARKER_COLOR) =>
-  L.divIcon({
-    className: '',
-    html: `<div style="width:14px;height:14px;background:${color};border:2px solid white;border-radius:3px;box-shadow:0 0 0 1px ${color}"></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
+const serviceIconCache = new Map();
+const programIconCache = new Map();
+
+const buildIcon = (color = '#753232') => {
+  let icon = serviceIconCache.get(color);
+  if (!icon) {
+    icon = L.divIcon({
+      className: '',
+      html: `<div style="width:18px;height:18px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 0 0 1px ${color}"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+    serviceIconCache.set(color, icon);
+  }
+  return icon;
+};
+
+const buildProgramMarkerIcon = (color = PROGRAM_MARKER_COLOR) => {
+  let icon = programIconCache.get(color);
+  if (!icon) {
+    icon = L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;background:${color};border:2px solid white;border-radius:3px;box-shadow:0 0 0 1px ${color}"></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    programIconCache.set(color, icon);
+  }
+  return icon;
+};
+
+const sectionStyleFn = () => SECTION_STYLE;
+
+function bindSectionPopup(feature, layer) {
+  const p = feature.properties || {};
+  layer.bindPopup(
+    `<div style="font-size:12px;line-height:1.35"><strong>Sección ${p.code ?? ''}</strong><br />${p.name || ''}<br />${p.municipio || ''}</div>`,
+  );
+}
 
 /** Tinte suave a partir de un hex (#rgb / #rrggbb) para sombrear filas de apoyos. */
 function hexToTint(hex, alpha = 0.22) {
@@ -194,14 +225,23 @@ function hexToTint(hex, alpha = 0.22) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Cache de bounds por referencia de features para no recorrer todos los vértices en cada render. */
+const sectionBoundsCache = new WeakMap();
+
 /** Rectángulo mínimo que contiene todos los anillos exteriores de las secciones (polígono “global” para encuadre). */
 function boundsFromAllSectionPolygons(geoJson) {
-  const bounds = L.latLngBounds([]);
   if (!geoJson?.features?.length) return null;
+  const cached = sectionBoundsCache.get(geoJson.features);
+  if (cached) return cached;
+
+  const bounds = L.latLngBounds([]);
 
   const extendRing = (ring) => {
     if (!Array.isArray(ring)) return;
-    for (const pt of ring) {
+    // Muestreo en anillos densos: basta para encuadre, evita O(n) completo en miles de vértices.
+    const step = ring.length > 80 ? Math.ceil(ring.length / 40) : 1;
+    for (let i = 0; i < ring.length; i += step) {
+      const pt = ring[i];
       if (!Array.isArray(pt) || pt.length < 2) continue;
       const lng = Number(pt[0]);
       const lat = Number(pt[1]);
@@ -220,7 +260,9 @@ function boundsFromAllSectionPolygons(geoJson) {
     }
   }
 
-  return bounds.isValid() ? bounds : null;
+  const result = bounds.isValid() ? bounds : null;
+  if (result) sectionBoundsCache.set(geoJson.features, result);
+  return result;
 }
 
 /** Encuadra el mapa solo al alcance conjunto de todas las secciones (sin centrar en ciudad fija). */
@@ -303,7 +345,7 @@ export default function MapPage() {
     return () => clearTimeout(id);
   }, [mapFilters.seccion_electoral]);
 
-  const [showSections, setShowSections] = useState(true);
+  const [showSections, setShowSections] = useState(false);
   const [showServices, setShowServices] = useState(true);
   const [showPrograms, setShowPrograms] = useState(true);
   const [selectedCitizenId, setSelectedCitizenId] = useState(null);
@@ -315,7 +357,7 @@ export default function MapPage() {
   const sectionsQuery = useQuery({
     queryKey: ['map-sections-geojson'],
     queryFn: () => mapsApi.sectionsGeoJson(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const { data: areas = [] } = useQuery({
@@ -411,6 +453,8 @@ export default function MapPage() {
     queryKey: ['map-service-markers', markerParams],
     queryFn: () => mapsApi.serviceMarkers(markerParams),
     enabled: showServices,
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
   });
 
   const { data: supportPrograms = [] } = useQuery({
@@ -463,6 +507,8 @@ export default function MapPage() {
     queryKey: ['map-program-markers', programMarkerParams],
     queryFn: () => mapsApi.programMarkers(programMarkerParams),
     enabled: showPrograms,
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
   });
 
   const statsParams = useMemo(() => {
@@ -639,9 +685,18 @@ export default function MapPage() {
 
   const geoJsonKey = useMemo(() => {
     if (!visibleSectionsGeo?.features?.length) return 'empty';
-    const firstCode = visibleSectionsGeo.features[0]?.properties?.code ?? '';
-    return `sections-${sectionFilter || 'all'}-${visibleSectionCount}-${firstCode}`;
-  }, [visibleSectionsGeo, visibleSectionCount, sectionFilter]);
+    return `sections-s${sectionFilter || 'all'}-d${filterDistritoNum || ''}-t${filterTerritorialIdNum || ''}-n${visibleSectionCount}`;
+  }, [
+    visibleSectionsGeo,
+    visibleSectionCount,
+    sectionFilter,
+    filterDistritoNum,
+    filterTerritorialIdNum,
+  ]);
+
+  const onSelectCitizen = useCallback((citizenId) => {
+    setSelectedCitizenId(citizenId);
+  }, []);
 
   /** Cuando cambian los datos de secciones (refetch o geometrías distintas), se recalcula el encuadre. */
   const boundsTrigger = `${geoJsonKey}:${sectionsQuery.dataUpdatedAt ?? 0}`;
@@ -1166,6 +1221,7 @@ export default function MapPage() {
           minZoom={0}
           maxZoom={21}
           scrollWheelZoom={false}
+          preferCanvas
           style={{ height: '100%', width: '100%' }}
         >
           <FitBoundsToSectionsEnvelope
@@ -1187,67 +1243,38 @@ export default function MapPage() {
             <GeoJSON
               key={geoJsonKey}
               data={visibleSectionsGeo}
-              style={() => SECTION_STYLE}
-              onEachFeature={(feature, layer) => {
-                const p = feature.properties || {};
-                layer.bindPopup(
-                  `<div style="font-size:12px;line-height:1.35"><strong>Sección ${p.code ?? ''}</strong><br />${p.name || ''}<br />${p.municipio || ''}</div>`,
-                );
-              }}
+              style={sectionStyleFn}
+              onEachFeature={bindSectionPopup}
             />
           )}
-          {showServices &&
-            (sectionFilter ? (
-              serviceMarkers.map((m) => (
+          {showServices && (
+            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+              {serviceMarkers.map((m) => (
                 <Marker
                   key={m.service_id}
                   position={[Number(m.latitud), Number(m.longitud)]}
                   icon={buildIcon(STATUS_HEX[m.status_code] || '#753232')}
                   eventHandlers={{
-                    click: () => setSelectedCitizenId(m.citizen_id),
+                    click: () => onSelectCitizen(m.citizen_id),
                   }}
                 />
-              ))
-            ) : (
-              <MarkerClusterGroup {...CLUSTER_OPTIONS}>
-                {serviceMarkers.map((m) => (
-                  <Marker
-                    key={m.service_id}
-                    position={[Number(m.latitud), Number(m.longitud)]}
-                    icon={buildIcon(STATUS_HEX[m.status_code] || '#753232')}
-                    eventHandlers={{
-                      click: () => setSelectedCitizenId(m.citizen_id),
-                    }}
-                  />
-                ))}
-              </MarkerClusterGroup>
-            ))}
-          {showPrograms &&
-            (sectionFilter ? (
-              mapProgramMarkers.map((m) => (
+              ))}
+            </MarkerClusterGroup>
+          )}
+          {showPrograms && (
+            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+              {mapProgramMarkers.map((m) => (
                 <Marker
                   key={`prog-citizen-${m.citizen_id}`}
                   position={[Number(m.latitud), Number(m.longitud)]}
                   icon={buildProgramMarkerIcon(m.color || PROGRAM_MARKER_COLOR)}
                   eventHandlers={{
-                    click: () => setSelectedCitizenId(m.citizen_id),
+                    click: () => onSelectCitizen(m.citizen_id),
                   }}
                 />
-              ))
-            ) : (
-              <MarkerClusterGroup {...CLUSTER_OPTIONS}>
-                {mapProgramMarkers.map((m) => (
-                  <Marker
-                    key={`prog-citizen-${m.citizen_id}`}
-                    position={[Number(m.latitud), Number(m.longitud)]}
-                    icon={buildProgramMarkerIcon(m.color || PROGRAM_MARKER_COLOR)}
-                    eventHandlers={{
-                      click: () => setSelectedCitizenId(m.citizen_id),
-                    }}
-                  />
-                ))}
-              </MarkerClusterGroup>
-            ))}
+              ))}
+            </MarkerClusterGroup>
+          )}
         </MapContainer>
       </div>
 
