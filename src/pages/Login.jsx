@@ -9,15 +9,18 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     try {
       await login(username, password);
       toast.success('Bienvenido');
       navigate('/dashboard');
-    } catch {
-      // toast manejado por interceptor
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' && detail.trim() ? detail : 'Credenciales inválidas');
     }
   };
 
@@ -32,6 +35,14 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 mt-1">Inicia sesión para continuar</p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4">
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {error}
+            </div>
+          )}
           <div>
             <label className="label" htmlFor="username">
               Usuario o correo
