@@ -327,6 +327,7 @@ export default function MapPage() {
     territorial_id: '',
     seccion_electoral: '',
     colonia: '',
+    direccion: '',
     operational_area_id: '',
     operational_area_offering_id: '',
     priority: '',
@@ -344,6 +345,24 @@ export default function MapPage() {
     const id = setTimeout(() => setDebouncedSeccion(mapFilters.seccion_electoral.trim()), 350);
     return () => clearTimeout(id);
   }, [mapFilters.seccion_electoral]);
+
+  const [debouncedColonia, setDebouncedColonia] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedColonia(mapFilters.colonia.trim()), 350);
+    return () => clearTimeout(id);
+  }, [mapFilters.colonia]);
+
+  const [debouncedDireccion, setDebouncedDireccion] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedDireccion(mapFilters.direccion.trim()), 350);
+    return () => clearTimeout(id);
+  }, [mapFilters.direccion]);
+
+  const [debouncedMunicipio, setDebouncedMunicipio] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedMunicipio(mapFilters.municipio.trim()), 350);
+    return () => clearTimeout(id);
+  }, [mapFilters.municipio]);
 
   const [showSections, setShowSections] = useState(false);
   const [showServices, setShowServices] = useState(true);
@@ -424,8 +443,7 @@ export default function MapPage() {
     const p = { limit: 5000 };
     if (debouncedCurp) p.curp = debouncedCurp;
     if (mapFilters.status_code) p.status_code = mapFilters.status_code;
-    const m = mapFilters.municipio.trim();
-    if (m) p.municipio = m;
+    if (debouncedMunicipio) p.municipio = debouncedMunicipio;
     if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
@@ -433,15 +451,16 @@ export default function MapPage() {
       p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
     if (mapFilters.priority) p.priority = mapFilters.priority;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
-    const col = mapFilters.colonia.trim();
-    if (col) p.colonia = col;
+    if (debouncedColonia) p.colonia = debouncedColonia;
+    if (debouncedDireccion) p.direccion = debouncedDireccion;
     return p;
   }, [
     debouncedCurp,
     debouncedSeccion,
+    debouncedColonia,
+    debouncedDireccion,
+    debouncedMunicipio,
     mapFilters.status_code,
-    mapFilters.municipio,
-    mapFilters.colonia,
     mapFilters.operational_area_offering_id,
     mapFilters.priority,
     filterAreaIdNum,
@@ -482,21 +501,21 @@ export default function MapPage() {
   const programMarkerParams = useMemo(() => {
     const p = { limit: 5000 };
     if (debouncedCurp) p.curp = debouncedCurp;
-    const m = mapFilters.municipio.trim();
-    if (m) p.municipio = m;
+    if (debouncedMunicipio) p.municipio = debouncedMunicipio;
     if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
-    const col = mapFilters.colonia.trim();
-    if (col) p.colonia = col;
+    if (debouncedColonia) p.colonia = debouncedColonia;
+    if (debouncedDireccion) p.direccion = debouncedDireccion;
     if (filterProgramIdNum) p.program_id = filterProgramIdNum;
     if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
     return p;
   }, [
     debouncedCurp,
     debouncedSeccion,
-    mapFilters.municipio,
-    mapFilters.colonia,
+    debouncedColonia,
+    debouncedDireccion,
+    debouncedMunicipio,
     filterDistritoNum,
     filterTerritorialIdNum,
     filterProgramIdNum,
@@ -515,13 +534,12 @@ export default function MapPage() {
     const p = {};
     if (debouncedCurp) p.curp = debouncedCurp;
     if (mapFilters.status_code) p.status_code = mapFilters.status_code;
-    const m = mapFilters.municipio.trim();
-    if (m) p.municipio = m;
+    if (debouncedMunicipio) p.municipio = debouncedMunicipio;
     if (filterDistritoNum) p.distrito = filterDistritoNum;
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
-    const col = mapFilters.colonia.trim();
-    if (col) p.colonia = col;
+    if (debouncedColonia) p.colonia = debouncedColonia;
+    if (debouncedDireccion) p.direccion = debouncedDireccion;
     if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
     if (mapFilters.operational_area_offering_id)
       p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
@@ -532,9 +550,10 @@ export default function MapPage() {
   }, [
     debouncedCurp,
     debouncedSeccion,
+    debouncedColonia,
+    debouncedDireccion,
+    debouncedMunicipio,
     mapFilters.status_code,
-    mapFilters.municipio,
-    mapFilters.colonia,
     mapFilters.operational_area_offering_id,
     mapFilters.priority,
     filterAreaIdNum,
@@ -553,12 +572,13 @@ export default function MapPage() {
   const hasActiveFilters =
     Boolean(debouncedCurp) ||
     Boolean(mapFilters.status_code) ||
-    Boolean(mapFilters.municipio.trim()) ||
+    Boolean(debouncedMunicipio || mapFilters.municipio.trim()) ||
     Boolean(filterDistritoNum) ||
     Boolean(filterTerritorialIdNum) ||
     Boolean(debouncedSeccion) ||
     Boolean(mapFilters.seccion_electoral.trim()) ||
-    Boolean(mapFilters.colonia.trim()) ||
+    Boolean(debouncedColonia || mapFilters.colonia.trim()) ||
+    Boolean(debouncedDireccion || mapFilters.direccion.trim()) ||
     Boolean(filterAreaIdNum) ||
     Boolean(mapFilters.operational_area_offering_id) ||
     Boolean(mapFilters.priority) ||
@@ -567,11 +587,12 @@ export default function MapPage() {
 
   const locationFilterCount =
     Number(Boolean(debouncedCurp || mapFilters.curp.trim())) +
-    Number(Boolean(mapFilters.municipio.trim())) +
+    Number(Boolean(debouncedMunicipio || mapFilters.municipio.trim())) +
     Number(Boolean(filterDistritoNum)) +
     Number(Boolean(filterTerritorialIdNum)) +
     Number(Boolean(debouncedSeccion || mapFilters.seccion_electoral.trim())) +
-    Number(Boolean(mapFilters.colonia.trim()));
+    Number(Boolean(debouncedColonia || mapFilters.colonia.trim())) +
+    Number(Boolean(debouncedDireccion || mapFilters.direccion.trim()));
   const serviceFilterCount =
     Number(Boolean(mapFilters.status_code)) +
     Number(Boolean(filterAreaIdNum)) +
@@ -589,6 +610,7 @@ export default function MapPage() {
       territorial_id: '',
       seccion_electoral: '',
       colonia: '',
+      direccion: '',
       operational_area_id: '',
       operational_area_offering_id: '',
       priority: '',
@@ -597,6 +619,9 @@ export default function MapPage() {
     });
     setDebouncedCurp('');
     setDebouncedSeccion('');
+    setDebouncedColonia('');
+    setDebouncedDireccion('');
+    setDebouncedMunicipio('');
   };
 
   const serviceMarkers = useMemo(() => servicesQuery.data?.markers ?? [], [servicesQuery.data]);
@@ -774,7 +799,7 @@ export default function MapPage() {
           <div className="space-y-2">
             <MapFilterAccordion
               title="Ubicación y ciudadano"
-              hint="CURP, municipio, distrito, territorial, sección, colonia"
+              hint="CURP, municipio, distrito, territorial, sección, colonia, dirección"
               defaultOpen={locationFilterCount > 0}
               badge={
                 locationFilterCount
@@ -889,7 +914,7 @@ export default function MapPage() {
                     id="map-filter-colonia"
                     className="input"
                     list="map-colonias-datalist"
-                    placeholder="Colonia del domicilio"
+                    placeholder="Coincidencia parcial"
                     value={mapFilters.colonia}
                     onChange={(e) => setMapFilters((f) => ({ ...f, colonia: e.target.value }))}
                   />
@@ -898,6 +923,18 @@ export default function MapPage() {
                       <option key={c.id} value={c.name} />
                     ))}
                   </datalist>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="map-filter-direccion">
+                    Dirección (calle / número)
+                  </label>
+                  <input
+                    id="map-filter-direccion"
+                    className="input"
+                    placeholder="Ej. Sur 16 o 245"
+                    value={mapFilters.direccion}
+                    onChange={(e) => setMapFilters((f) => ({ ...f, direccion: e.target.value }))}
+                  />
                 </div>
               </div>
             </MapFilterAccordion>

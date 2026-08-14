@@ -12,6 +12,7 @@ const emptyFilters = {
   distrito: '',
   territorial_id: '',
   colonia: '',
+  direccion: '',
   codigo_postal: '',
   program_id: '',
   support_type_id: '',
@@ -76,6 +77,7 @@ export default function ReportsPage() {
     if (filters.distrito) p.distrito = Number(filters.distrito);
     if (filters.territorial_id) p.territorial_id = Number(filters.territorial_id);
     if (filters.colonia.trim()) p.colonia = filters.colonia.trim();
+    if (filters.direccion.trim()) p.direccion = filters.direccion.trim();
     if (filters.codigo_postal.trim()) p.codigo_postal = filters.codigo_postal.trim();
     if (filterProgramIdNum) p.program_id = filterProgramIdNum;
     if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
@@ -92,6 +94,7 @@ export default function ReportsPage() {
     filters.distrito,
     filters.territorial_id,
     filters.colonia,
+    filters.direccion,
     filters.codigo_postal,
     filters.is_active,
     filterProgramIdNum,
@@ -199,6 +202,7 @@ export default function ReportsPage() {
     Boolean(filters.territorial_id) ||
     Boolean(filters.seccion_electoral.trim()) ||
     Boolean(filters.colonia.trim()) ||
+    Boolean(filters.direccion.trim()) ||
     Boolean(filters.codigo_postal.trim()) ||
     Boolean(filterProgramIdNum) ||
     Boolean(filterSupportTypeIdNum) ||
@@ -256,7 +260,7 @@ export default function ReportsPage() {
           <div>
             <h3 className="font-semibold text-slate-800">Filtros</h3>
             <p className="text-sm text-slate-500">
-              Distrito, territorial, sección, programa, apoyo, servicio, colonia, CP, nombre o CURP.
+              Distrito, territorial, sección, programa, apoyo, servicio, colonia, dirección, CP, nombre o CURP.
             </p>
           </div>
           {hasActiveFilters && (
@@ -270,7 +274,7 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <FilterAccordion title="Búsqueda y ubicación" hint="Nombre/CURP, distrito, territorial, sección, colonia y CP">
+        <FilterAccordion title="Búsqueda y ubicación" hint="Nombre/CURP, distrito, territorial, sección, colonia, dirección y CP">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="sm:col-span-2">
               <label className="label">Nombre o CURP</label>
@@ -379,7 +383,7 @@ export default function ReportsPage() {
               <input
                 className="input"
                 list="reports-colonias"
-                placeholder="Colonia del domicilio"
+                placeholder="Coincidencia parcial"
                 value={filters.colonia}
                 onChange={(e) => {
                   setFilters((f) => ({ ...f, colonia: e.target.value }));
@@ -391,6 +395,18 @@ export default function ReportsPage() {
                   <option key={c.id} value={c.name} />
                 ))}
               </datalist>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Dirección (calle / número)</label>
+              <input
+                className="input"
+                placeholder="Ej. Sur 16 o 245"
+                value={filters.direccion}
+                onChange={(e) => {
+                  setFilters((f) => ({ ...f, direccion: e.target.value }));
+                  setPage(1);
+                }}
+              />
             </div>
             <div>
               <label className="label">Estatus</label>
