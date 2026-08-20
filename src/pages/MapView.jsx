@@ -200,10 +200,125 @@ const buildProgramMarkerIcon = (color = PROGRAM_MARKER_COLOR) => {
 
 const sectionStyleFn = () => SECTION_STYLE;
 
-function bindSectionPopup(feature, layer) {
-  const p = feature.properties || {};
-  layer.bindPopup(
-    `<div style="font-size:12px;line-height:1.35"><strong>Sección ${p.code ?? ''}</strong><br />${p.name || ''}<br />${p.municipio || ''}</div>`,
+function DirectoryAuthPhoto({ kind, id, alt }) {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    let objectUrl = null;
+    setUrl(null);
+    if (!id) return undefined;
+    const fetchPhoto = kind === 'enlace' ? mapsApi.enlacePhoto : mapsApi.promotorPhoto;
+    fetchPhoto(id)
+      .then((blob) => {
+        if (!alive) return;
+        objectUrl = URL.createObjectURL(blob);
+        if (!alive) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (alive) setUrl(null);
+      });
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [kind, id]);
+
+  if (!url) {
+    return (
+      <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+        Sin foto
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className="h-28 w-28 rounded-lg object-cover ring-1 ring-slate-200"
+    />
+  );
+}
+
+function DirectorySeccionPanel({ seccionCode }) {
+  const { data, isPending, isError } = useQuery({
+    queryKey: ['map-directory', seccionCode],
+    queryFn: () => mapsApi.directoryBySeccion(seccionCode),
+    enabled: Boolean(seccionCode),
+  });
+
+  if (isPending) {
+    return <p className="text-sm text-slate-500">Cargando directorio…</p>;
+  }
+  if (isError || !data) {
+    return <p className="text-sm text-slate-500">No se pudo cargar el directorio de esta sección.</p>;
+  }
+  if (!data.enlace && !data.promotor) {
+    return (
+      <p className="text-sm text-slate-500">
+        Sin enlace ni promotor registrados para la sección {seccionCode}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {data.colonia ? (
+        <p className="text-sm text-slate-600">
+          <span className="font-medium text-slate-800">Colonia:</span> {data.colonia}
+        </p>
+      ) : null}
+
+      {data.enlace ? (
+        <section className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Enlace</h4>
+          <div className="flex gap-3">
+            {data.enlace.has_photo ? (
+              <DirectoryAuthPhoto kind="enlace" id={data.enlace.id} alt={data.enlace.name} />
+            ) : (
+              <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                Sin foto
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900">{data.enlace.name}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {data.promotor ? (
+        <section className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Promotor</h4>
+          <div className="flex gap-3">
+            {data.promotor.has_photo ? (
+              <DirectoryAuthPhoto
+                kind="promotor"
+                id={data.promotor.id}
+                alt={data.promotor.name}
+              />
+            ) : (
+              <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                Sin foto
+              </div>
+            )}
+            <div className="min-w-0 space-y-1">
+              <p className="font-medium text-slate-900">{data.promotor.name}</p>
+              {data.promotor.phone ? (
+                <p className="text-sm text-slate-600">{data.promotor.phone}</p>
+              ) : null}
+              {data.promotor.email ? (
+                <p className="break-all text-sm text-slate-600">{data.promotor.email}</p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -368,6 +483,7 @@ export default function MapPage() {
   const [showServices, setShowServices] = useState(true);
   const [showPrograms, setShowPrograms] = useState(true);
   const [selectedCitizenId, setSelectedCitizenId] = useState(null);
+  const [selectedDirectorySeccion, setSelectedDirectorySeccion] = useState(null);
 
   const filterAreaIdNum = mapFilters.operational_area_id
     ? Number(mapFilters.operational_area_id)
@@ -722,6 +838,21 @@ export default function MapPage() {
   const onSelectCitizen = useCallback((citizenId) => {
     setSelectedCitizenId(citizenId);
   }, []);
+
+  const onSelectDirectorySeccion = useCallback((code) => {
+    if (!code) return;
+    setSelectedDirectorySeccion(String(code));
+  }, []);
+
+  const bindSectionDirectory = useCallback(
+    (feature, layer) => {
+      const p = feature.properties || {};
+      const code = p.code ?? p.seccion_id ?? p.id_seccion;
+      layer.bindTooltip(`Sección ${code ?? ''}`, { sticky: true });
+      layer.on('click', () => onSelectDirectorySeccion(code));
+    },
+    [onSelectDirectorySeccion],
+  );
 
   /** Cuando cambian los datos de secciones (refetch o geometrías distintas), se recalcula el encuadre. */
   const boundsTrigger = `${geoJsonKey}:${sectionsQuery.dataUpdatedAt ?? 0}`;
@@ -1281,7 +1412,7 @@ export default function MapPage() {
               key={geoJsonKey}
               data={visibleSectionsGeo}
               style={sectionStyleFn}
-              onEachFeature={bindSectionPopup}
+              onEachFeature={bindSectionDirectory}
             />
           )}
           {showServices && (
@@ -1314,6 +1445,23 @@ export default function MapPage() {
           )}
         </MapContainer>
       </div>
+
+      <SlidePanel
+        open={Boolean(selectedDirectorySeccion)}
+        title={
+          selectedDirectorySeccion
+            ? `Directorio · Sección ${selectedDirectorySeccion}`
+            : 'Directorio'
+        }
+        placement="right"
+        width="max-w-md"
+        className="!max-h-[100dvh]"
+        onClose={() => setSelectedDirectorySeccion(null)}
+      >
+        {selectedDirectorySeccion ? (
+          <DirectorySeccionPanel seccionCode={selectedDirectorySeccion} />
+        ) : null}
+      </SlidePanel>
 
       <SlidePanel
         open={Boolean(selectedCitizenId)}

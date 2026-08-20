@@ -110,6 +110,16 @@ export const mapsApi = {
   serviceMarkers: (params) => api.get('/maps/service-markers', { params }).then((r) => r.data),
   programMarkers: (params) => api.get('/maps/program-markers', { params }).then((r) => r.data),
   stats: (params) => api.get('/maps/stats', { params }).then((r) => r.data),
+  directoryBySeccion: (seccion) =>
+    api.get(`/maps/directory/by-seccion/${encodeURIComponent(seccion)}`).then((r) => r.data),
+  enlacePhoto: (id) =>
+    api
+      .get(`/maps/directory/enlaces/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
+  promotorPhoto: (id) =>
+    api
+      .get(`/maps/directory/promotores/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
 };
 
 export const reportsApi = {
