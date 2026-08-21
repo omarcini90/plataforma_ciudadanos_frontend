@@ -17,6 +17,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { catalogsApi } from '../api/index.js';
+import PhotoCropModal from '../components/PhotoCropModal.jsx';
 
 const TABS = [
   { id: 'STATUS', label: 'Estatus', shortLabel: 'Estatus', Icon: IconLayoutList },
@@ -1657,7 +1658,7 @@ function TerritorialesCrud() {
   );
 }
 
-function DirectoryPhotoThumb({ kind, id, hasPhoto, alt }) {
+function DirectoryPhotoThumb({ kind, id, hasPhoto, alt, cacheKey = 0 }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -1685,7 +1686,7 @@ function DirectoryPhotoThumb({ kind, id, hasPhoto, alt }) {
       alive = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [kind, id, hasPhoto]);
+  }, [kind, id, hasPhoto, cacheKey]);
 
   if (!hasPhoto) {
     return (
@@ -1760,11 +1761,11 @@ function DirectoryCrud() {
   const ek = ['catalogs', 'directory-enlaces'];
   const pk = ['catalogs', 'directory-promotores'];
 
-  const { data: enlaces = [], isLoading: loadingEnlaces } = useQuery({
+  const { data: enlaces = [], isLoading: loadingEnlaces, dataUpdatedAt: enlacesAt } = useQuery({
     queryKey: ek,
     queryFn: () => catalogsApi.directoryEnlaces(),
   });
-  const { data: promotores = [], isLoading: loadingPromotores } = useQuery({
+  const { data: promotores = [], isLoading: loadingPromotores, dataUpdatedAt: promotoresAt } = useQuery({
     queryKey: pk,
     queryFn: () => catalogsApi.directoryPromotores(),
   });
@@ -1791,6 +1792,18 @@ function DirectoryCrud() {
     enlace_id: '',
   });
   const [filterQ, setFilterQ] = useState('');
+  const [photoCrop, setPhotoCrop] = useState(null); // { kind, id, name, imageSrc }
+
+  const closePhotoCrop = () => {
+    if (photoCrop?.imageSrc) URL.revokeObjectURL(photoCrop.imageSrc);
+    setPhotoCrop(null);
+  };
+
+  const openPhotoCrop = (kind, id, name, file) => {
+    if (!file) return;
+    const imageSrc = URL.createObjectURL(file);
+    setPhotoCrop({ kind, id, name, imageSrc });
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ek });
@@ -1836,6 +1849,7 @@ function DirectoryCrud() {
     mutationFn: ({ id, file }) => catalogsApi.uploadDirectoryEnlacePhoto(id, file),
     onSuccess: () => {
       toast.success('Foto de enlace actualizada');
+      closePhotoCrop();
       invalidate();
     },
   });
@@ -1887,6 +1901,7 @@ function DirectoryCrud() {
     mutationFn: ({ id, file }) => catalogsApi.uploadDirectoryPromotorPhoto(id, file),
     onSuccess: () => {
       toast.success('Foto de promotor actualizada');
+      closePhotoCrop();
       invalidate();
     },
   });
@@ -2042,6 +2057,7 @@ function DirectoryCrud() {
                       id={e.id}
                       hasPhoto={e.has_photo}
                       alt={e.full_name}
+                      cacheKey={enlacesAt}
                     />
                   </td>
                   <td className="px-3 py-2 font-medium text-slate-800">{e.full_name}</td>
@@ -2063,7 +2079,7 @@ function DirectoryCrud() {
                           className="hidden"
                           onChange={(ev) => {
                             const file = ev.target.files?.[0];
-                            if (file) uploadEnlacePhoto.mutate({ id: e.id, file });
+                            if (file) openPhotoCrop('enlace', e.id, e.full_name, file);
                             ev.target.value = '';
                           }}
                         />
@@ -2123,6 +2139,7 @@ function DirectoryCrud() {
                       id={p.id}
                       hasPhoto={p.has_photo}
                       alt={p.full_name}
+                      cacheKey={promotoresAt}
                     />
                   </td>
                   <td className="px-3 py-2 font-medium text-slate-800">{p.seccion_id}</td>
@@ -2145,7 +2162,7 @@ function DirectoryCrud() {
                           className="hidden"
                           onChange={(ev) => {
                             const file = ev.target.files?.[0];
-                            if (file) uploadPromotorPhoto.mutate({ id: p.id, file });
+                            if (file) openPhotoCrop('promotor', p.id, p.full_name, file);
                             ev.target.value = '';
                           }}
                         />
@@ -2327,6 +2344,26 @@ function DirectoryCrud() {
           </div>
         </CatalogModal>
       )}
+
+      <PhotoCropModal
+        open={Boolean(photoCrop)}
+        imageSrc={photoCrop?.imageSrc}
+        title={
+          photoCrop
+            ? `Ajustar foto · ${photoCrop.name || (photoCrop.kind === 'enlace' ? 'Enlace' : 'Promotor')}`
+            : 'Ajustar foto'
+        }
+        saving={uploadEnlacePhoto.isPending || uploadPromotorPhoto.isPending}
+        onCancel={closePhotoCrop}
+        onConfirm={async (file) => {
+          if (!photoCrop) return;
+          if (photoCrop.kind === 'enlace') {
+            await uploadEnlacePhoto.mutateAsync({ id: photoCrop.id, file });
+          } else {
+            await uploadPromotorPhoto.mutateAsync({ id: photoCrop.id, file });
+          }
+        }}
+      />
     </div>
   );
 }

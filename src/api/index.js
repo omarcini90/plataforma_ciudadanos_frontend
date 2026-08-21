@@ -101,12 +101,8 @@ export const catalogsApi = {
       .then((r) => r.data),
   uploadDirectoryEnlacePhoto: (id, file) => {
     const fd = new FormData();
-    fd.append('file', file);
-    return api
-      .post(`/catalogs/directory/enlaces/${id}/photo`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data);
+    fd.append('file', file, file.name || 'photo.jpg');
+    return api.post(`/catalogs/directory/enlaces/${id}/photo`, fd).then((r) => r.data);
   },
   clearDirectoryEnlacePhoto: (id) =>
     api.delete(`/catalogs/directory/enlaces/${id}/photo`).then((r) => r.data),
@@ -123,12 +119,8 @@ export const catalogsApi = {
       .then((r) => r.data),
   uploadDirectoryPromotorPhoto: (id, file) => {
     const fd = new FormData();
-    fd.append('file', file);
-    return api
-      .post(`/catalogs/directory/promotores/${id}/photo`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data);
+    fd.append('file', file, file.name || 'photo.jpg');
+    return api.post(`/catalogs/directory/promotores/${id}/photo`, fd).then((r) => r.data);
   },
   clearDirectoryPromotorPhoto: (id) =>
     api.delete(`/catalogs/directory/promotores/${id}/photo`).then((r) => r.data),
