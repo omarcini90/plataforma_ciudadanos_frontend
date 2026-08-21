@@ -479,7 +479,7 @@ export default function MapPage() {
     return () => clearTimeout(id);
   }, [mapFilters.municipio]);
 
-  const [showSections, setShowSections] = useState(false);
+  const [showSections, setShowSections] = useState(true);
   const [showServices, setShowServices] = useState(true);
   const [showPrograms, setShowPrograms] = useState(true);
   const [selectedCitizenId, setSelectedCitizenId] = useState(null);

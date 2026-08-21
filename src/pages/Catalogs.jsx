@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -13,6 +13,7 @@ import {
   IconPencil,
   IconPlus,
   IconTrash,
+  IconUsers,
   IconX,
 } from '@tabler/icons-react';
 import { catalogsApi } from '../api/index.js';
@@ -23,6 +24,7 @@ const TABS = [
   { id: 'COLONIAS', label: 'Colonias', shortLabel: 'Colonias', Icon: IconHome },
   { id: 'SECCIONES', label: 'Secciones', shortLabel: 'Secciones', Icon: IconFlag },
   { id: 'TERRITORIALES', label: 'Territoriales', shortLabel: 'Territoriales', Icon: IconMap2 },
+  { id: 'DIRECTORIO', label: 'Directorio', shortLabel: 'Directorio', Icon: IconUsers },
 ];
 
 function CatalogTabButton({ t, active, onSelect, variant }) {
@@ -212,7 +214,7 @@ function DeleteIconButton({ title = 'Eliminar', disabled, onClick }) {
   );
 }
 
-function CatalogModal({ title, children, onClose }) {
+function CatalogModal({ title, children, onClose, wide = false }) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
@@ -221,7 +223,9 @@ function CatalogModal({ title, children, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className={`bg-white rounded-xl shadow-xl w-full max-h-[90vh] overflow-y-auto ${
+          wide ? 'max-w-2xl' : 'max-w-lg'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center gap-3 px-4 py-3 border-b border-slate-200">
@@ -261,6 +265,7 @@ export default function CatalogsPage() {
           {tab === 'COLONIAS' && <ColoniasCrud />}
           {tab === 'SECCIONES' && <SeccionesCrud />}
           {tab === 'TERRITORIALES' && <TerritorialesCrud />}
+          {tab === 'DIRECTORIO' && <DirectoryCrud />}
         </div>
       </div>
     </div>
@@ -1648,6 +1653,680 @@ function TerritorialesCrud() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function DirectoryPhotoThumb({ kind, id, hasPhoto, alt }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    let objectUrl = null;
+    setUrl(null);
+    if (!hasPhoto || !id) return undefined;
+    const fetchPhoto =
+      kind === 'enlace'
+        ? catalogsApi.directoryEnlacePhoto
+        : catalogsApi.directoryPromotorPhoto;
+    fetchPhoto(id)
+      .then((blob) => {
+        if (!alive) return;
+        objectUrl = URL.createObjectURL(blob);
+        if (!alive) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (alive) setUrl(null);
+      });
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [kind, id, hasPhoto]);
+
+  if (!hasPhoto) {
+    return (
+      <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100 text-[10px] text-slate-400">
+        —
+      </div>
+    );
+  }
+  if (!url) {
+    return <div className="h-12 w-12 animate-pulse rounded bg-slate-100" />;
+  }
+  return <img src={url} alt={alt} className="h-12 w-12 rounded object-cover ring-1 ring-slate-200" />;
+}
+
+function SeccionMultiSelect({ secciones, value, onChange }) {
+  const [q, setQ] = useState('');
+  const selected = useMemo(() => new Set((value || []).map(Number)), [value]);
+  const filtered = useMemo(() => {
+    const term = q.trim();
+    if (!term) return secciones;
+    return secciones.filter((s) => String(s.id).includes(term));
+  }, [secciones, q]);
+
+  const toggle = (id) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange([...next].sort((a, b) => a - b));
+  };
+
+  return (
+    <div className="space-y-2">
+      <input
+        className="input"
+        placeholder="Filtrar sección…"
+        value={q}
+        onChange={(e) => setQ(e.target.value.replace(/\D/g, ''))}
+      />
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2 space-y-1">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-slate-400 px-1 py-2">Sin coincidencias</p>
+        ) : (
+          filtered.map((s) => (
+            <label
+              key={s.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-50"
+            >
+              <input
+                type="checkbox"
+                className="rounded border-slate-300"
+                checked={selected.has(Number(s.id))}
+                onChange={() => toggle(Number(s.id))}
+              />
+              <span>
+                Sección {s.id}
+                {s.distrito != null ? (
+                  <span className="text-slate-400"> · D{s.distrito}</span>
+                ) : null}
+              </span>
+            </label>
+          ))
+        )}
+      </div>
+      <p className="text-xs text-slate-500">{selected.size} sección(es) seleccionada(s)</p>
+    </div>
+  );
+}
+
+/** Gestión editable de enlaces (multi-sección) y promotores (1 sección). */
+function DirectoryCrud() {
+  const qc = useQueryClient();
+  const ek = ['catalogs', 'directory-enlaces'];
+  const pk = ['catalogs', 'directory-promotores'];
+
+  const { data: enlaces = [], isLoading: loadingEnlaces } = useQuery({
+    queryKey: ek,
+    queryFn: () => catalogsApi.directoryEnlaces(),
+  });
+  const { data: promotores = [], isLoading: loadingPromotores } = useQuery({
+    queryKey: pk,
+    queryFn: () => catalogsApi.directoryPromotores(),
+  });
+  const { data: secciones = [] } = useQuery({
+    queryKey: ['catalogs', 'secciones-table'],
+    queryFn: () => catalogsApi.secciones(),
+  });
+
+  const seccionesSorted = useMemo(
+    () => [...secciones].sort((a, b) => a.id - b.id),
+    [secciones],
+  );
+
+  const [view, setView] = useState('enlaces');
+  const [enlaceDialog, setEnlaceDialog] = useState(null);
+  const [promotorDialog, setPromotorDialog] = useState(null);
+  const [enlaceForm, setEnlaceForm] = useState({ full_name: '', seccion_ids: [] });
+  const [promotorForm, setPromotorForm] = useState({
+    full_name: '',
+    seccion_id: '',
+    phone: '',
+    email: '',
+    colonia: '',
+    enlace_id: '',
+  });
+  const [filterQ, setFilterQ] = useState('');
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ek });
+    qc.invalidateQueries({ queryKey: pk });
+    qc.invalidateQueries({ queryKey: ['map-directory'] });
+  };
+
+  const createEnlace = useMutation({
+    mutationFn: () =>
+      catalogsApi.createDirectoryEnlace({
+        full_name: enlaceForm.full_name.trim(),
+        seccion_ids: enlaceForm.seccion_ids,
+      }),
+    onSuccess: () => {
+      toast.success('Enlace registrado');
+      setEnlaceDialog(null);
+      invalidate();
+    },
+  });
+
+  const updateEnlace = useMutation({
+    mutationFn: () =>
+      catalogsApi.updateDirectoryEnlace(enlaceDialog.id, {
+        full_name: enlaceForm.full_name.trim(),
+        seccion_ids: enlaceForm.seccion_ids,
+      }),
+    onSuccess: () => {
+      toast.success('Enlace actualizado');
+      setEnlaceDialog(null);
+      invalidate();
+    },
+  });
+
+  const deleteEnlace = useMutation({
+    mutationFn: (id) => catalogsApi.deleteDirectoryEnlace(id),
+    onSuccess: () => {
+      toast.success('Enlace eliminado');
+      invalidate();
+    },
+  });
+
+  const uploadEnlacePhoto = useMutation({
+    mutationFn: ({ id, file }) => catalogsApi.uploadDirectoryEnlacePhoto(id, file),
+    onSuccess: () => {
+      toast.success('Foto de enlace actualizada');
+      invalidate();
+    },
+  });
+
+  const createPromotor = useMutation({
+    mutationFn: () =>
+      catalogsApi.createDirectoryPromotor({
+        full_name: promotorForm.full_name.trim(),
+        seccion_id: Number(promotorForm.seccion_id),
+        phone: promotorForm.phone.trim() || null,
+        email: promotorForm.email.trim() || null,
+        colonia: promotorForm.colonia.trim() || null,
+        enlace_id: promotorForm.enlace_id ? Number(promotorForm.enlace_id) : null,
+      }),
+    onSuccess: () => {
+      toast.success('Promotor registrado');
+      setPromotorDialog(null);
+      invalidate();
+    },
+  });
+
+  const updatePromotor = useMutation({
+    mutationFn: () =>
+      catalogsApi.updateDirectoryPromotor(promotorDialog.id, {
+        full_name: promotorForm.full_name.trim(),
+        seccion_id: Number(promotorForm.seccion_id),
+        phone: promotorForm.phone.trim() || null,
+        email: promotorForm.email.trim() || null,
+        colonia: promotorForm.colonia.trim() || null,
+        enlace_id: promotorForm.enlace_id ? Number(promotorForm.enlace_id) : null,
+        clear_enlace: !promotorForm.enlace_id,
+      }),
+    onSuccess: () => {
+      toast.success('Promotor actualizado');
+      setPromotorDialog(null);
+      invalidate();
+    },
+  });
+
+  const deletePromotor = useMutation({
+    mutationFn: (id) => catalogsApi.deleteDirectoryPromotor(id),
+    onSuccess: () => {
+      toast.success('Promotor eliminado');
+      invalidate();
+    },
+  });
+
+  const uploadPromotorPhoto = useMutation({
+    mutationFn: ({ id, file }) => catalogsApi.uploadDirectoryPromotorPhoto(id, file),
+    onSuccess: () => {
+      toast.success('Foto de promotor actualizada');
+      invalidate();
+    },
+  });
+
+  const openCreateEnlace = () => {
+    setEnlaceForm({ full_name: '', seccion_ids: [] });
+    setEnlaceDialog({ mode: 'create' });
+  };
+
+  const openEditEnlace = (e) => {
+    setEnlaceForm({
+      full_name: e.full_name || '',
+      seccion_ids: [...(e.seccion_ids || [])],
+    });
+    setEnlaceDialog({ mode: 'edit', id: e.id, has_photo: e.has_photo });
+  };
+
+  const openCreatePromotor = () => {
+    setPromotorForm({
+      full_name: '',
+      seccion_id: '',
+      phone: '',
+      email: '',
+      colonia: '',
+      enlace_id: '',
+    });
+    setPromotorDialog({ mode: 'create' });
+  };
+
+  const openEditPromotor = (p) => {
+    setPromotorForm({
+      full_name: p.full_name || '',
+      seccion_id: String(p.seccion_id ?? ''),
+      phone: p.phone || '',
+      email: p.email || '',
+      colonia: p.colonia || '',
+      enlace_id: p.enlace_id != null ? String(p.enlace_id) : '',
+    });
+    setPromotorDialog({ mode: 'edit', id: p.id, has_photo: p.has_photo });
+  };
+
+  const filteredEnlaces = useMemo(() => {
+    const term = filterQ.trim().toLowerCase();
+    if (!term) return enlaces;
+    return enlaces.filter(
+      (e) =>
+        e.full_name.toLowerCase().includes(term) ||
+        (e.seccion_ids || []).some((s) => String(s).includes(term)),
+    );
+  }, [enlaces, filterQ]);
+
+  const filteredPromotores = useMemo(() => {
+    const term = filterQ.trim().toLowerCase();
+    if (!term) return promotores;
+    return promotores.filter(
+      (p) =>
+        p.full_name.toLowerCase().includes(term) ||
+        String(p.seccion_id).includes(term) ||
+        (p.colonia || '').toLowerCase().includes(term) ||
+        (p.enlace_name || '').toLowerCase().includes(term),
+    );
+  }, [promotores, filterQ]);
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-800">Directorio operativo</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Un enlace cubre varias secciones; cada sección tiene un promotor. Los cambios se ven en el
+            mapa al hacer clic en el polígono.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="inline-flex rounded-lg ring-1 ring-slate-200 p-0.5 bg-slate-50">
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm rounded-md ${
+                view === 'enlaces' ? 'bg-white shadow-sm text-brand-800 font-medium' : 'text-slate-600'
+              }`}
+              onClick={() => setView('enlaces')}
+            >
+              Enlaces ({enlaces.length})
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm rounded-md ${
+                view === 'promotores'
+                  ? 'bg-white shadow-sm text-brand-800 font-medium'
+                  : 'text-slate-600'
+              }`}
+              onClick={() => setView('promotores')}
+            >
+              Promotores ({promotores.length})
+            </button>
+          </div>
+          {view === 'enlaces' ? (
+            <BtnPrimaryIcon title="Nuevo enlace" onClick={openCreateEnlace}>
+              <IconPlus size={18} stroke={1.75} aria-hidden />
+              Agregar enlace
+            </BtnPrimaryIcon>
+          ) : (
+            <BtnPrimaryIcon title="Nuevo promotor" onClick={openCreatePromotor}>
+              <IconPlus size={18} stroke={1.75} aria-hidden />
+              Agregar promotor
+            </BtnPrimaryIcon>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <input
+          className="input max-w-md"
+          placeholder={
+            view === 'enlaces' ? 'Buscar enlace o sección…' : 'Buscar promotor, sección o colonia…'
+          }
+          value={filterQ}
+          onChange={(e) => setFilterQ(e.target.value)}
+        />
+      </div>
+
+      {view === 'enlaces' ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-slate-600 border-b">
+              <tr>
+                <th className="px-3 py-2">Foto</th>
+                <th className="px-3 py-2">Nombre</th>
+                <th className="px-3 py-2">Secciones</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingEnlaces && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-slate-400">
+                    Cargando…
+                  </td>
+                </tr>
+              )}
+              {!loadingEnlaces && filteredEnlaces.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-slate-400">
+                    Sin enlaces
+                  </td>
+                </tr>
+              )}
+              {filteredEnlaces.map((e) => (
+                <tr key={e.id}>
+                  <td className="px-3 py-2">
+                    <DirectoryPhotoThumb
+                      kind="enlace"
+                      id={e.id}
+                      hasPhoto={e.has_photo}
+                      alt={e.full_name}
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-medium text-slate-800">{e.full_name}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {(e.seccion_ids || []).length
+                      ? (e.seccion_ids || []).slice(0, 12).join(', ') +
+                        ((e.seccion_ids || []).length > 12
+                          ? ` (+${(e.seccion_ids || []).length - 12})`
+                          : '')
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <label className="inline-flex cursor-pointer" title="Subir foto">
+                        <span className="sr-only">Subir foto</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(ev) => {
+                            const file = ev.target.files?.[0];
+                            if (file) uploadEnlacePhoto.mutate({ id: e.id, file });
+                            ev.target.value = '';
+                          }}
+                        />
+                        <span className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}>
+                          Foto
+                        </span>
+                      </label>
+                      <EditIconButton onClick={() => openEditEnlace(e)} />
+                      <DeleteIconButton
+                        title="Eliminar enlace"
+                        onClick={() => {
+                          if (window.confirm(`¿Eliminar el enlace "${e.full_name}"?`)) {
+                            deleteEnlace.mutate(e.id);
+                          }
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-slate-600 border-b">
+              <tr>
+                <th className="px-3 py-2">Foto</th>
+                <th className="px-3 py-2">Sección</th>
+                <th className="px-3 py-2">Promotor</th>
+                <th className="px-3 py-2">Enlace</th>
+                <th className="px-3 py-2">Contacto</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingPromotores && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                    Cargando…
+                  </td>
+                </tr>
+              )}
+              {!loadingPromotores && filteredPromotores.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                    Sin promotores
+                  </td>
+                </tr>
+              )}
+              {filteredPromotores.map((p) => (
+                <tr key={p.id}>
+                  <td className="px-3 py-2">
+                    <DirectoryPhotoThumb
+                      kind="promotor"
+                      id={p.id}
+                      hasPhoto={p.has_photo}
+                      alt={p.full_name}
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-medium text-slate-800">{p.seccion_id}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-slate-800">{p.full_name}</div>
+                    {p.colonia ? <div className="text-xs text-slate-500">{p.colonia}</div> : null}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">{p.enlace_name || '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    <div>{p.phone || '—'}</div>
+                    <div className="text-xs break-all">{p.email || ''}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <label className="inline-flex cursor-pointer" title="Subir foto">
+                        <span className="sr-only">Subir foto</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(ev) => {
+                            const file = ev.target.files?.[0];
+                            if (file) uploadPromotorPhoto.mutate({ id: p.id, file });
+                            ev.target.value = '';
+                          }}
+                        />
+                        <span className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}>
+                          Foto
+                        </span>
+                      </label>
+                      <EditIconButton onClick={() => openEditPromotor(p)} />
+                      <DeleteIconButton
+                        title="Eliminar promotor"
+                        onClick={() => {
+                          if (window.confirm(`¿Eliminar al promotor "${p.full_name}"?`)) {
+                            deletePromotor.mutate(p.id);
+                          }
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {enlaceDialog && (
+        <CatalogModal
+          wide
+          title={enlaceDialog.mode === 'create' ? 'Nuevo enlace' : 'Editar enlace'}
+          onClose={() => setEnlaceDialog(null)}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="label">Nombre completo</label>
+              <input
+                className="input"
+                value={enlaceForm.full_name}
+                onChange={(e) => setEnlaceForm((f) => ({ ...f, full_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="label">Secciones a cargo</label>
+              <SeccionMultiSelect
+                secciones={seccionesSorted}
+                value={enlaceForm.seccion_ids}
+                onChange={(ids) => setEnlaceForm((f) => ({ ...f, seccion_ids: ids }))}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg text-sm ring-1 ring-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                onClick={() => setEnlaceDialog(null)}
+              >
+                Cancelar
+              </button>
+              <BtnPrimaryIcon
+                disabled={
+                  !enlaceForm.full_name.trim() ||
+                  createEnlace.isPending ||
+                  updateEnlace.isPending
+                }
+                onClick={() =>
+                  enlaceDialog.mode === 'create' ? createEnlace.mutate() : updateEnlace.mutate()
+                }
+              >
+                <IconDeviceFloppy size={18} stroke={1.75} aria-hidden />
+                Guardar
+              </BtnPrimaryIcon>
+            </div>
+          </div>
+        </CatalogModal>
+      )}
+
+      {promotorDialog && (
+        <CatalogModal
+          wide
+          title={promotorDialog.mode === 'create' ? 'Nuevo promotor' : 'Editar promotor'}
+          onClose={() => setPromotorDialog(null)}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="label">Nombre completo</label>
+              <input
+                className="input"
+                value={promotorForm.full_name}
+                onChange={(e) => setPromotorForm((f) => ({ ...f, full_name: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Sección</label>
+                <input
+                  className="input"
+                  list="directory-promotor-secciones"
+                  inputMode="numeric"
+                  value={promotorForm.seccion_id}
+                  onChange={(e) =>
+                    setPromotorForm((f) => ({
+                      ...f,
+                      seccion_id: e.target.value.replace(/\D/g, ''),
+                    }))
+                  }
+                />
+                <datalist id="directory-promotor-secciones">
+                  {seccionesSorted.map((s) => (
+                    <option key={s.id} value={String(s.id)} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="label">Enlace (jefe)</label>
+                <select
+                  className="input"
+                  value={promotorForm.enlace_id}
+                  onChange={(e) => setPromotorForm((f) => ({ ...f, enlace_id: e.target.value }))}
+                >
+                  <option value="">Sin enlace</option>
+                  {enlaces.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="label">Colonia</label>
+              <input
+                className="input"
+                value={promotorForm.colonia}
+                onChange={(e) => setPromotorForm((f) => ({ ...f, colonia: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Teléfono</label>
+                <input
+                  className="input"
+                  value={promotorForm.phone}
+                  onChange={(e) => setPromotorForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Correo</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={promotorForm.email}
+                  onChange={(e) => setPromotorForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg text-sm ring-1 ring-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                onClick={() => setPromotorDialog(null)}
+              >
+                Cancelar
+              </button>
+              <BtnPrimaryIcon
+                disabled={
+                  !promotorForm.full_name.trim() ||
+                  !promotorForm.seccion_id ||
+                  createPromotor.isPending ||
+                  updatePromotor.isPending
+                }
+                onClick={() =>
+                  promotorDialog.mode === 'create'
+                    ? createPromotor.mutate()
+                    : updatePromotor.mutate()
+                }
+              >
+                <IconDeviceFloppy size={18} stroke={1.75} aria-hidden />
+                Guardar
+              </BtnPrimaryIcon>
+            </div>
+          </div>
+        </CatalogModal>
+      )}
     </div>
   );
 }

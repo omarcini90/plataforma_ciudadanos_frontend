@@ -87,6 +87,51 @@ export const catalogsApi = {
   updateTerritorial: (id, p) =>
     api.put(`/catalogs/territoriales/${id}`, p).then((r) => r.data),
   deleteTerritorial: (id) => api.delete(`/catalogs/territoriales/${id}`),
+
+  /** Directorio enlace / promotor (editable). */
+  directoryEnlaces: () => api.get('/catalogs/directory/enlaces').then((r) => r.data),
+  createDirectoryEnlace: (p) =>
+    api.post('/catalogs/directory/enlaces', p).then((r) => r.data),
+  updateDirectoryEnlace: (id, p) =>
+    api.put(`/catalogs/directory/enlaces/${id}`, p).then((r) => r.data),
+  deleteDirectoryEnlace: (id) => api.delete(`/catalogs/directory/enlaces/${id}`),
+  directoryEnlacePhoto: (id) =>
+    api
+      .get(`/catalogs/directory/enlaces/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
+  uploadDirectoryEnlacePhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post(`/catalogs/directory/enlaces/${id}/photo`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+  clearDirectoryEnlacePhoto: (id) =>
+    api.delete(`/catalogs/directory/enlaces/${id}/photo`).then((r) => r.data),
+
+  directoryPromotores: () => api.get('/catalogs/directory/promotores').then((r) => r.data),
+  createDirectoryPromotor: (p) =>
+    api.post('/catalogs/directory/promotores', p).then((r) => r.data),
+  updateDirectoryPromotor: (id, p) =>
+    api.put(`/catalogs/directory/promotores/${id}`, p).then((r) => r.data),
+  deleteDirectoryPromotor: (id) => api.delete(`/catalogs/directory/promotores/${id}`),
+  directoryPromotorPhoto: (id) =>
+    api
+      .get(`/catalogs/directory/promotores/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
+  uploadDirectoryPromotorPhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api
+      .post(`/catalogs/directory/promotores/${id}/photo`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
+  clearDirectoryPromotorPhoto: (id) =>
+    api.delete(`/catalogs/directory/promotores/${id}/photo`).then((r) => r.data),
 };
 
 export const servicesApi = {
