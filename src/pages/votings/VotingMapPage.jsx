@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { GeoJSON, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { catalogsApi, votingsApi } from '../../api/index.js';
+import { useAuth } from '../../hooks/useAuth.jsx';
+import SectionVotingCharts, { aggregateVotingRows } from './SectionVotingCharts.jsx';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -179,14 +181,25 @@ function featureHasTerritorial(feature, territorialId) {
 }
 
 export default function VotingMapPage({ year, title, subtitle }) {
+  const { hasPermission } = useAuth();
   const [seccionFilter, setSeccionFilter] = useState('');
   const [distritoFilter, setDistritoFilter] = useState('');
   const [territorialFilter, setTerritorialFilter] = useState('');
   const [layerMode, setLayerMode] = useState('margin');
+  const [selectedSeccionId, setSelectedSeccionId] = useState(null);
+
+  const otherYear = year === 2021 ? 2024 : 2021;
+  const canReadOtherYear = hasPermission(`votings.read.${otherYear}`);
 
   const mapSectionsQuery = useQuery({
     queryKey: ['votings', year, 'map-sections'],
     queryFn: year === 2021 ? votingsApi.mapSections2021 : votingsApi.mapSections2024,
+  });
+
+  const otherMapSectionsQuery = useQuery({
+    queryKey: ['votings', otherYear, 'map-sections'],
+    queryFn: otherYear === 2021 ? votingsApi.mapSections2021 : votingsApi.mapSections2024,
+    enabled: canReadOtherYear,
   });
 
   const summaryQuery = useQuery({
@@ -194,9 +207,35 @@ export default function VotingMapPage({ year, title, subtitle }) {
     queryFn: year === 2021 ? votingsApi.summary2021 : votingsApi.summary2024,
   });
 
+  const otherSummaryQuery = useQuery({
+    queryKey: ['votings', otherYear, 'summary'],
+    queryFn: otherYear === 2021 ? votingsApi.summary2021 : votingsApi.summary2024,
+    enabled: canReadOtherYear,
+  });
+
   const sectionsGeoQuery = useQuery({
     queryKey: ['votings', 'sections-geojson'],
     queryFn: () => votingsApi.sectionsGeoJson(),
+  });
+
+  const sectionDetailQuery = useQuery({
+    queryKey: ['votings', year, 'section-detail', selectedSeccionId],
+    queryFn: () =>
+      year === 2021
+        ? votingsApi.section2021(selectedSeccionId)
+        : votingsApi.section2024(selectedSeccionId),
+    enabled: selectedSeccionId != null,
+    retry: false,
+  });
+
+  const otherSectionDetailQuery = useQuery({
+    queryKey: ['votings', otherYear, 'section-detail', selectedSeccionId],
+    queryFn: () =>
+      otherYear === 2021
+        ? votingsApi.section2021(selectedSeccionId)
+        : votingsApi.section2024(selectedSeccionId),
+    enabled: selectedSeccionId != null && canReadOtherYear,
+    retry: false,
   });
 
   const { data: secciones = [] } = useQuery({
@@ -241,6 +280,14 @@ export default function VotingMapPage({ year, title, subtitle }) {
     return map;
   }, [mapSectionsQuery.data]);
 
+  const otherVotingBySeccion = useMemo(() => {
+    const map = new Map();
+    for (const row of otherMapSectionsQuery.data ?? []) {
+      map.set(row.seccion_id, row);
+    }
+    return map;
+  }, [otherMapSectionsQuery.data]);
+
   const counts = useMemo(() => {
     let win = 0;
     let lose = 0;
@@ -272,6 +319,74 @@ export default function VotingMapPage({ year, title, subtitle }) {
   }, [partyCounts]);
 
   const filterNum = seccionFilter ? Number(seccionFilter) : null;
+
+  useEffect(() => {
+    if (filterNum && Number.isFinite(filterNum)) {
+      setSelectedSeccionId(filterNum);
+    }
+  }, [filterNum]);
+
+  const selectedVoting =
+    selectedSeccionId != null ? votingBySeccion.get(selectedSeccionId) : null;
+  const otherSelectedVoting =
+    selectedSeccionId != null ? otherVotingBySeccion.get(selectedSeccionId) : null;
+
+  const filteredSeccionIds = useMemo(() => {
+    if (!filterDistritoNum && !filterTerritorialIdNum) return null;
+    const features = sectionsGeoQuery.data?.features ?? [];
+    const ids = new Set();
+    for (const feature of features) {
+      if (filterDistritoNum && Number(feature.properties?.distrito) !== filterDistritoNum) {
+        continue;
+      }
+      if (filterTerritorialIdNum && !featureHasTerritorial(feature, filterTerritorialIdNum)) {
+        continue;
+      }
+      const id = resolveSeccionId(feature.properties);
+      if (id != null) ids.add(id);
+    }
+    return ids;
+  }, [sectionsGeoQuery.data, filterDistritoNum, filterTerritorialIdNum]);
+
+  const aggregateScope = useMemo(() => {
+    const parts = [];
+    if (filterDistritoNum) parts.push(`Distrito ${filterDistritoNum}`);
+    if (filterTerritorialIdNum) {
+      const t = territoriales.find((x) => Number(x.id) === filterTerritorialIdNum);
+      parts.push(t?.name || `Territorial ${filterTerritorialIdNum}`);
+    }
+    return {
+      title: parts.length ? `Resultados — ${parts.join(' · ')}` : 'Resultados — Toda la alcaldía',
+      subtitle: parts.length
+        ? 'Agregado de las secciones visibles con el filtro actual'
+        : 'Totales de todas las secciones con datos',
+      isFullAlcaldia: parts.length === 0,
+    };
+  }, [filterDistritoNum, filterTerritorialIdNum, territoriales]);
+
+  const alcaldiaVoting = useMemo(() => {
+    const rows = mapSectionsQuery.data ?? [];
+    const filtered =
+      filteredSeccionIds == null
+        ? rows
+        : rows.filter((r) => filteredSeccionIds.has(Number(r.seccion_id)));
+    return aggregateVotingRows(filtered);
+  }, [mapSectionsQuery.data, filteredSeccionIds]);
+
+  const otherAlcaldiaVoting = useMemo(() => {
+    const rows = otherMapSectionsQuery.data ?? [];
+    const filtered =
+      filteredSeccionIds == null
+        ? rows
+        : rows.filter((r) => filteredSeccionIds.has(Number(r.seccion_id)));
+    return aggregateVotingRows(filtered);
+  }, [otherMapSectionsQuery.data, filteredSeccionIds]);
+
+  const selectSeccion = (seccionId) => {
+    if (seccionId == null) return;
+    setSelectedSeccionId(seccionId);
+    setSeccionFilter(String(seccionId));
+  };
 
   const enrichedGeoJson = useMemo(() => {
     const base = sectionsGeoQuery.data;
@@ -314,7 +429,9 @@ export default function VotingMapPage({ year, title, subtitle }) {
 
   const styleFeature = (feature) => {
     const seccionId = resolveSeccionId(feature?.properties);
-    const selected = filterNum && seccionId === filterNum;
+    const selected =
+      (filterNum && seccionId === filterNum) ||
+      (selectedSeccionId != null && seccionId === selectedSeccionId);
     const voting = feature?.properties?.voting;
 
     if (layerMode === 'party') {
@@ -345,7 +462,8 @@ export default function VotingMapPage({ year, title, subtitle }) {
         <p className="text-sm text-slate-500">
           {layerMode === 'party' && year === 2024
             ? 'Mapa por sección: color del bloque ganador (PAN-PRI-PRD, MORENA o MC) según votos totales de la sección.'
-            : subtitle}
+            : subtitle}{' '}
+          Haz clic en una sección o escribe su número para ver el detalle; sin selección se grafica toda la alcaldía.
         </p>
       </header>
 
@@ -465,6 +583,7 @@ export default function VotingMapPage({ year, title, subtitle }) {
             setSeccionFilter('');
             setDistritoFilter('');
             setTerritorialFilter('');
+            setSelectedSeccionId(null);
           }}
         >
           Ver todas
@@ -527,7 +646,9 @@ export default function VotingMapPage({ year, title, subtitle }) {
           zoom={11}
           minZoom={0}
           maxZoom={21}
-          scrollWheelZoom
+          scrollWheelZoom={false}
+          doubleClickZoom={false}
+          boxZoom={false}
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
@@ -540,18 +661,86 @@ export default function VotingMapPage({ year, title, subtitle }) {
             <>
               <FitBounds geoJson={enrichedGeoJson} enabled />
               <GeoJSON
-                key={`${year}-${layerMode}-${filterNum || 'all'}-${mapSectionsQuery.dataUpdatedAt}`}
+                key={`${year}-${layerMode}-${filterNum || 'all'}-${selectedSeccionId || 'none'}-${mapSectionsQuery.dataUpdatedAt}`}
                 data={enrichedGeoJson}
                 style={styleFeature}
                 onEachFeature={(feature, layer) => {
                   const seccionId = resolveSeccionId(feature.properties);
                   layer.bindPopup(buildPopup(seccionId, feature.properties?.voting));
+                  layer.on('click', () => selectSeccion(seccionId));
                 }}
               />
             </>
           )}
         </MapContainer>
       </div>
+
+      {selectedSeccionId != null ? (
+        <div className="space-y-4">
+          <SectionVotingCharts
+            year={year}
+            title={`Resultados — Sección ${selectedSeccionId}`}
+            subtitle={
+              [selectedVoting?.coordinacion, selectedVoting?.colonia].filter(Boolean).join(' · ') ||
+              undefined
+            }
+            voting={selectedVoting}
+            detail={sectionDetailQuery.data}
+            detailLoading={sectionDetailQuery.isPending}
+            emptyMessage={`Sección ${selectedSeccionId}: no hay resultados de votación ${year}.`}
+          />
+          {canReadOtherYear && (
+            <SectionVotingCharts
+              year={otherYear}
+              title={`Resultados — Sección ${selectedSeccionId}`}
+              subtitle={
+                [otherSelectedVoting?.coordinacion, otherSelectedVoting?.colonia]
+                  .filter(Boolean)
+                  .join(' · ') || undefined
+              }
+              voting={otherSelectedVoting}
+              detail={otherSectionDetailQuery.data}
+              detailLoading={otherSectionDetailQuery.isPending}
+              emptyMessage={`Sección ${selectedSeccionId}: no hay resultados de votación ${otherYear}.`}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <SectionVotingCharts
+            year={year}
+            title={aggregateScope.title}
+            subtitle={aggregateScope.subtitle}
+            voting={alcaldiaVoting}
+            detail={
+              aggregateScope.isFullAlcaldia
+                ? {
+                    lista_nominal: summaryQuery.data?.lista_nominal,
+                    total_votos: summaryQuery.data?.total_votos,
+                  }
+                : null
+            }
+            detailLoading={aggregateScope.isFullAlcaldia && summaryQuery.isPending}
+          />
+          {canReadOtherYear && (
+            <SectionVotingCharts
+              year={otherYear}
+              title={aggregateScope.title}
+              subtitle={aggregateScope.subtitle}
+              voting={otherAlcaldiaVoting}
+              detail={
+                aggregateScope.isFullAlcaldia
+                  ? {
+                      lista_nominal: otherSummaryQuery.data?.lista_nominal,
+                      total_votos: otherSummaryQuery.data?.total_votos,
+                    }
+                  : null
+              }
+              detailLoading={aggregateScope.isFullAlcaldia && otherSummaryQuery.isPending}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

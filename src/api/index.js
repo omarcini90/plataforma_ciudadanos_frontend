@@ -198,10 +198,16 @@ export const logsApi = {
 export const votingsApi = {
   sectionsGeoJson: () => api.get('/votings/sections/geojson').then((r) => r.data),
   sections2021: (params) => api.get('/votings/2021/sections', { params }).then((r) => r.data),
+  section2021: (seccionId) =>
+    api.get(`/votings/2021/sections/${seccionId}`).then((r) => r.data),
   mapSections2021: () => api.get('/votings/2021/map-sections').then((r) => r.data),
   summary2021: () => api.get('/votings/2021/summary').then((r) => r.data),
   coordinaciones2021: () => api.get('/votings/2021/coordinaciones').then((r) => r.data),
   sections2024: (params) => api.get('/votings/2024/sections', { params }).then((r) => r.data),
+  section2024: (seccionId) =>
+    api
+      .get('/votings/2024/sections', { params: { seccion_id: seccionId, page: 1, page_size: 1 } })
+      .then((r) => r.data?.items?.[0] ?? null),
   mapSections2024: () => api.get('/votings/2024/map-sections').then((r) => r.data),
   casillasBySection2024: (seccionId) =>
     api.get(`/votings/2024/sections/${seccionId}/casillas`).then((r) => r.data),
