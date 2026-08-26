@@ -11,6 +11,7 @@ import {
   IconLayoutList,
   IconMap2,
   IconPencil,
+  IconPhoto,
   IconPlus,
   IconTrash,
   IconUsers,
@@ -1755,7 +1756,7 @@ function SeccionMultiSelect({ secciones, value, onChange }) {
   );
 }
 
-/** Gestión editable de enlaces (multi-sección) y promotores (1 sección). */
+/** Gestión editable de enlaces (multi-sección) y promotores (varios por sección). */
 function DirectoryCrud() {
   const qc = useQueryClient();
   const ek = ['catalogs', 'directory-enlaces'];
@@ -1971,8 +1972,8 @@ function DirectoryCrud() {
         <div>
           <h3 className="font-semibold text-slate-800">Directorio operativo</h3>
           <p className="text-sm text-slate-500 mt-1">
-            Un enlace cubre varias secciones; cada sección tiene un promotor. Los cambios se ven en el
-            mapa al hacer clic en el polígono.
+            Un enlace cubre varias secciones; una sección puede tener varios promotores. Los cambios
+            se ven en el mapa al hacer clic en el polígono.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2028,8 +2029,10 @@ function DirectoryCrud() {
           <table className="min-w-full text-sm">
             <thead className="text-left text-slate-600 border-b">
               <tr>
-                <th className="px-3 py-2">Foto</th>
-                <th className="px-3 py-2">Nombre</th>
+                <th className="px-3 py-2" title="Foto">
+                  <IconPhoto size={18} stroke={1.75} className="text-slate-500" aria-hidden />
+                  <span className="sr-only">Foto</span>
+                </th>
                 <th className="px-3 py-2">Secciones</th>
                 <th className="px-3 py-2 text-right">Acciones</th>
               </tr>
@@ -2083,8 +2086,11 @@ function DirectoryCrud() {
                             ev.target.value = '';
                           }}
                         />
-                        <span className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}>
-                          Foto
+                        <span
+                          className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}
+                          aria-hidden
+                        >
+                          <IconPhoto size={18} stroke={1.75} />
                         </span>
                       </label>
                       <EditIconButton onClick={() => openEditEnlace(e)} />
@@ -2108,7 +2114,10 @@ function DirectoryCrud() {
           <table className="min-w-full text-sm">
             <thead className="text-left text-slate-600 border-b">
               <tr>
-                <th className="px-3 py-2">Foto</th>
+                <th className="px-3 py-2" title="Foto">
+                  <IconPhoto size={18} stroke={1.75} className="text-slate-500" aria-hidden />
+                  <span className="sr-only">Foto</span>
+                </th>
                 <th className="px-3 py-2">Sección</th>
                 <th className="px-3 py-2">Promotor</th>
                 <th className="px-3 py-2">Enlace</th>
@@ -2166,8 +2175,11 @@ function DirectoryCrud() {
                             ev.target.value = '';
                           }}
                         />
-                        <span className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}>
-                          Foto
+                        <span
+                          className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}
+                          aria-hidden
+                        >
+                          <IconPhoto size={18} stroke={1.75} />
                         </span>
                       </label>
                       <EditIconButton onClick={() => openEditPromotor(p)} />
@@ -2272,6 +2284,9 @@ function DirectoryCrud() {
                     <option key={s.id} value={String(s.id)} />
                   ))}
                 </datalist>
+                <p className="mt-1 text-xs text-slate-500">
+                  Puede haber más de un promotor en la misma sección.
+                </p>
               </div>
               <div>
                 <label className="label">Enlace (jefe)</label>

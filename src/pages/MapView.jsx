@@ -257,10 +257,10 @@ function DirectorySeccionPanel({ seccionCode }) {
   if (isError || !data) {
     return <p className="text-sm text-slate-500">No se pudo cargar el directorio de esta sección.</p>;
   }
-  if (!data.enlace && !data.promotor) {
+  if (!data.enlace && !(data.promotores || []).length) {
     return (
       <p className="text-sm text-slate-500">
-        Sin enlace ni promotor registrados para la sección {seccionCode}.
+        Sin enlace ni promotores registrados para la sección {seccionCode}.
       </p>
     );
   }
@@ -291,31 +291,37 @@ function DirectorySeccionPanel({ seccionCode }) {
         </section>
       ) : null}
 
-      {data.promotor ? (
-        <section className="space-y-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Promotor</h4>
-          <div className="flex gap-3">
-            {data.promotor.has_photo ? (
-              <DirectoryAuthPhoto
-                kind="promotor"
-                id={data.promotor.id}
-                alt={data.promotor.name}
-              />
-            ) : (
-              <div className="flex h-28 w-28 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
-                Sin foto
-              </div>
-            )}
-            <div className="min-w-0 space-y-1">
-              <p className="font-medium text-slate-900">{data.promotor.name}</p>
-              {data.promotor.phone ? (
-                <p className="text-sm text-slate-600">{data.promotor.phone}</p>
-              ) : null}
-              {data.promotor.email ? (
-                <p className="break-all text-sm text-slate-600">{data.promotor.email}</p>
-              ) : null}
-            </div>
-          </div>
+      {(data.promotores || []).length > 0 ? (
+        <section className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Promotores ({data.promotores.length})
+          </h4>
+          <ul className="space-y-4">
+            {data.promotores.map((promotor) => (
+              <li key={promotor.id} className="flex gap-3">
+                {promotor.has_photo ? (
+                  <DirectoryAuthPhoto
+                    kind="promotor"
+                    id={promotor.id}
+                    alt={promotor.name}
+                  />
+                ) : (
+                  <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                    Sin foto
+                  </div>
+                )}
+                <div className="min-w-0 space-y-1">
+                  <p className="font-medium text-slate-900">{promotor.name}</p>
+                  {promotor.phone ? (
+                    <p className="text-sm text-slate-600">{promotor.phone}</p>
+                  ) : null}
+                  {promotor.email ? (
+                    <p className="break-all text-sm text-slate-600">{promotor.email}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
     </div>
