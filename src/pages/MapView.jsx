@@ -986,6 +986,7 @@ export default function MapPage() {
         </div>
       </header>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <section className="card space-y-2.5 p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -1462,9 +1463,7 @@ export default function MapPage() {
               <span className="text-xs text-slate-500">
                 {citizenListQuery.isPending
                   ? 'Cargando…'
-                  : `${fmtStat(citizenListQuery.data?.total || 0)} ciudadano${
-                      (citizenListQuery.data?.total || 0) === 1 ? '' : 's'
-                    }`}
+                  : `${fmtStat(citizenListQuery.data?.total || 0)} ciudadanos`}
               </span>
             </div>
             <div className="overflow-hidden rounded-lg border border-slate-100">
