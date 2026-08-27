@@ -101,8 +101,8 @@ function NavLinks({ items, onNavigate, pathname }) {
                 onClick={() => toggleGroup(item.label)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition border-l-2 touch-manipulation ${
                   groupActive
-                    ? 'bg-brand-800/80 text-white border-accent-500'
-                    : 'border-transparent text-cream-100/80 hover:bg-brand-800 hover:text-white hover:border-accent-400/60'
+                    ? 'bg-brand-900 text-white border-accent-500'
+                    : 'border-transparent text-slate-600 hover:bg-brand-50 hover:text-brand-800 hover:border-accent-400/50'
                 }`}
               >
                 <item.icon size={18} stroke={1.9} aria-hidden />
@@ -114,7 +114,7 @@ function NavLinks({ items, onNavigate, pathname }) {
                 />
               </button>
               {isOpen && (
-                <div className="ml-3 pl-3 border-l border-brand-700/60 space-y-1">
+                <div className="ml-3 pl-3 border-l border-brand-100 space-y-1">
                   {item.children.map((child) => (
                     <NavLink
                       key={child.to}
@@ -123,8 +123,8 @@ function NavLinks({ items, onNavigate, pathname }) {
                       className={({ isActive }) =>
                         `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition border-l-2 touch-manipulation ${
                           isActive
-                            ? 'bg-brand-700 text-white border-accent-500'
-                            : 'border-transparent text-cream-100/75 hover:bg-brand-800 hover:text-white hover:border-accent-400/60'
+                            ? 'bg-brand-900 text-white border-accent-500'
+                            : 'border-transparent text-slate-600 hover:bg-brand-50 hover:text-brand-800 hover:border-accent-400/50'
                         }`
                       }
                     >
@@ -145,8 +145,8 @@ function NavLinks({ items, onNavigate, pathname }) {
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition border-l-2 touch-manipulation ${
                 isActive
-                  ? 'bg-brand-700 text-white border-accent-500'
-                  : 'border-transparent text-cream-100/80 hover:bg-brand-800 hover:text-white hover:border-accent-400/60 active:bg-brand-800'
+                  ? 'bg-brand-900 text-white border-accent-500'
+                  : 'border-transparent text-slate-600 hover:bg-brand-50 hover:text-brand-800 hover:border-accent-400/50 active:bg-brand-100'
               }`
             }
           >
@@ -161,9 +161,9 @@ function NavLinks({ items, onNavigate, pathname }) {
 
 function SidebarBrand() {
   return (
-    <div className="px-6 py-5 border-b border-brand-800 bg-brand-950">
-      <h1 className="text-lg font-semibold text-white">Plataforma</h1>
-      <p className="text-xs text-accent-300">Gestión Ciudadana</p>
+    <div className="px-6 py-5 border-b border-cream-200 bg-white">
+      <h1 className="text-lg font-semibold text-brand-900">Plataforma</h1>
+      <p className="text-xs text-accent-600">Gestión Ciudadana</p>
     </div>
   );
 }
@@ -206,7 +206,7 @@ export default function MainLayout() {
   return (
     <div className="flex min-h-screen bg-cream-50">
       {/* Sidebar escritorio */}
-      <aside className="hidden lg:flex w-64 shrink-0 bg-brand-900 text-cream-50 flex-col">
+      <aside className="hidden lg:flex w-64 shrink-0 bg-cream-50 text-slate-700 flex-col border-r border-cream-200">
         <SidebarBrand />
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           <NavLinks items={visibleNav} pathname={location.pathname} />
@@ -223,7 +223,7 @@ export default function MainLayout() {
             onClick={closeMenu}
           />
           <aside
-            className="absolute left-0 top-0 h-full w-[min(100vw,18rem)] max-w-[85vw] bg-brand-900 text-cream-50 flex flex-col shadow-2xl"
+            className="absolute left-0 top-0 h-full w-[min(100vw,18rem)] max-w-[85vw] bg-cream-50 text-slate-700 flex flex-col shadow-2xl border-r border-cream-200"
             role="dialog"
             aria-modal="true"
             aria-label="Menú de navegación"

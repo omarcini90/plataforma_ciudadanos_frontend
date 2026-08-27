@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import CitizenFichaPanel from '../components/CitizenFichaPanel.jsx';
 import SlidePanel from '../components/SlidePanel.jsx';
-import { GeoJSON, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
+import { GeoJSON, LayerGroup, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import { catalogsApi, mapsApi, supportsApi } from '../api/index.js';
@@ -156,7 +156,7 @@ const SECTION_STYLE = {
 
 const PROGRAM_MARKER_COLOR = '#7c3aed';
 
-/** Clustering siempre activo (incluye filtro por sección) para no montar miles de Marker sueltos. */
+/** Clustering solo en vista de alcaldía; con filtro por sección los puntos van sueltos. */
 const CLUSTER_OPTIONS = {
   chunkedLoading: true,
   chunkInterval: 50,
@@ -166,6 +166,11 @@ const CLUSTER_OPTIONS = {
   spiderfyOnMaxZoom: true,
   removeOutsideVisibleBounds: true,
 };
+
+function OptionalCluster({ enabled, children }) {
+  if (!enabled) return <LayerGroup>{children}</LayerGroup>;
+  return <MarkerClusterGroup {...CLUSTER_OPTIONS}>{children}</MarkerClusterGroup>;
+}
 
 const serviceIconCache = new Map();
 const programIconCache = new Map();
@@ -490,6 +495,8 @@ export default function MapPage() {
   const [showPrograms, setShowPrograms] = useState(true);
   const [selectedCitizenId, setSelectedCitizenId] = useState(null);
   const [selectedDirectorySeccion, setSelectedDirectorySeccion] = useState(null);
+  const [citizenListPage, setCitizenListPage] = useState(1);
+  const citizenListPageSize = 20;
 
   const filterAreaIdNum = mapFilters.operational_area_id
     ? Number(mapFilters.operational_area_id)
@@ -691,6 +698,69 @@ export default function MapPage() {
     staleTime: 15_000,
   });
 
+  const citizenListParams = useMemo(() => {
+    const p = { page: citizenListPage, page_size: citizenListPageSize };
+    if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
+    if (debouncedCurp) p.curp = debouncedCurp;
+    if (debouncedMunicipio) p.municipio = debouncedMunicipio;
+    if (filterDistritoNum) p.distrito = filterDistritoNum;
+    if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
+    if (debouncedColonia) p.colonia = debouncedColonia;
+    if (debouncedDireccion) p.direccion = debouncedDireccion;
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
+    return p;
+  }, [
+    citizenListPage,
+    debouncedSeccion,
+    debouncedCurp,
+    debouncedMunicipio,
+    filterDistritoNum,
+    filterTerritorialIdNum,
+    debouncedColonia,
+    debouncedDireccion,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
+  ]);
+
+  const citizenListFilterKey = useMemo(
+    () =>
+      JSON.stringify({
+        seccion: debouncedSeccion,
+        curp: debouncedCurp,
+        municipio: debouncedMunicipio,
+        distrito: filterDistritoNum,
+        territorial: filterTerritorialIdNum,
+        colonia: debouncedColonia,
+        direccion: debouncedDireccion,
+        program: filterProgramIdNum,
+        supportType: filterSupportTypeIdNum,
+      }),
+    [
+      debouncedSeccion,
+      debouncedCurp,
+      debouncedMunicipio,
+      filterDistritoNum,
+      filterTerritorialIdNum,
+      debouncedColonia,
+      debouncedDireccion,
+      filterProgramIdNum,
+      filterSupportTypeIdNum,
+    ],
+  );
+
+  useEffect(() => {
+    setCitizenListPage(1);
+  }, [citizenListFilterKey]);
+
+  const citizenListQuery = useQuery({
+    queryKey: ['map-citizens', citizenListParams],
+    queryFn: () => mapsApi.citizens(citizenListParams),
+    enabled: Boolean(debouncedSeccion),
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
+  });
+
   const hasActiveFilters =
     Boolean(debouncedCurp) ||
     Boolean(mapFilters.status_code) ||
@@ -754,6 +824,7 @@ export default function MapPage() {
   const sectionsGeo = sectionsQuery.data;
   const sectionInput = mapFilters.seccion_electoral.trim();
   const sectionFilter = debouncedSeccion;
+  const clusterMarkers = !sectionFilter;
   const sectionFilterNum = sectionFilter ? Number(sectionFilter) : null;
   const sectionInputPending = Boolean(sectionInput) && sectionInput !== sectionFilter;
 
@@ -915,7 +986,6 @@ export default function MapPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <section className="card space-y-2.5 p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -1215,6 +1285,7 @@ export default function MapPage() {
           </div>
         </section>
 
+        <div className="space-y-4 min-w-0">
         <section className="card space-y-3 p-4 lg:max-h-[min(28rem,55vh)] lg:overflow-y-auto">
           <div>
             <h3 className="font-semibold text-slate-800">Resumen estadístico</h3>
@@ -1376,6 +1447,113 @@ export default function MapPage() {
             </div>
           </div>
         </section>
+
+        {sectionFilter ? (
+          <section className="card space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700">
+                  Ciudadanos de la sección {sectionFilter}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Programa, domicilio y nombre · clic para ver ficha
+                </p>
+              </div>
+              <span className="text-xs text-slate-500">
+                {citizenListQuery.isPending
+                  ? 'Cargando…'
+                  : `${fmtStat(citizenListQuery.data?.total || 0)} ciudadano${
+                      (citizenListQuery.data?.total || 0) === 1 ? '' : 's'
+                    }`}
+              </span>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-slate-100">
+              <div className="max-h-64 overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-left text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Nombre</th>
+                      <th className="px-3 py-2 font-medium">Programa</th>
+                      <th className="px-3 py-2 font-medium">Dirección</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {citizenListQuery.isPending && !citizenListQuery.data?.items?.length ? (
+                      <tr>
+                        <td className="px-3 py-6 text-center text-slate-500" colSpan={3}>
+                          Cargando ciudadanos…
+                        </td>
+                      </tr>
+                    ) : (citizenListQuery.data?.items ?? []).length ? (
+                      citizenListQuery.data.items.map((c) => (
+                        <tr
+                          key={c.citizen_id}
+                          className="cursor-pointer hover:bg-brand-50/70"
+                          onClick={() => onSelectCitizen(c.citizen_id)}
+                        >
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            {c.nombre_completo || '—'}
+                          </td>
+                          <td
+                            className="px-3 py-2 text-slate-700 max-w-[10rem] truncate"
+                            title={c.programs_summary || ''}
+                          >
+                            {c.programs_summary || '—'}
+                          </td>
+                          <td
+                            className="px-3 py-2 text-slate-600 max-w-[16rem] truncate"
+                            title={c.direccion || ''}
+                          >
+                            {c.direccion || '—'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="px-3 py-6 text-center text-slate-500" colSpan={3}>
+                          Sin ciudadanos para la sección y filtros actuales.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {Math.ceil((citizenListQuery.data?.total || 0) / citizenListPageSize) > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span>
+                  Página {citizenListPage} de{' '}
+                  {Math.max(
+                    1,
+                    Math.ceil((citizenListQuery.data?.total || 0) / citizenListPageSize),
+                  )}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary !px-2.5 !py-1 text-xs"
+                    disabled={citizenListPage <= 1}
+                    onClick={() => setCitizenListPage((p) => Math.max(1, p - 1))}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary !px-2.5 !py-1 text-xs"
+                    disabled={
+                      citizenListPage >=
+                      Math.ceil((citizenListQuery.data?.total || 0) / citizenListPageSize)
+                    }
+                    onClick={() => setCitizenListPage((p) => p + 1)}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+        </div>
       </div>
 
       <div
@@ -1422,7 +1600,7 @@ export default function MapPage() {
             />
           )}
           {showServices && (
-            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+            <OptionalCluster key={`svc-${clusterMarkers ? 'cluster' : 'raw'}`} enabled={clusterMarkers}>
               {serviceMarkers.map((m) => (
                 <Marker
                   key={m.service_id}
@@ -1433,10 +1611,10 @@ export default function MapPage() {
                   }}
                 />
               ))}
-            </MarkerClusterGroup>
+            </OptionalCluster>
           )}
           {showPrograms && (
-            <MarkerClusterGroup {...CLUSTER_OPTIONS}>
+            <OptionalCluster key={`prog-${clusterMarkers ? 'cluster' : 'raw'}`} enabled={clusterMarkers}>
               {mapProgramMarkers.map((m) => (
                 <Marker
                   key={`prog-citizen-${m.citizen_id}`}
@@ -1447,7 +1625,7 @@ export default function MapPage() {
                   }}
                 />
               ))}
-            </MarkerClusterGroup>
+            </OptionalCluster>
           )}
         </MapContainer>
       </div>
