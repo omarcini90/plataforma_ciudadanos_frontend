@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { GeoJSON, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { catalogsApi, votingsApi } from '../../api/index.js';
-import { useAuth } from '../../hooks/useAuth.jsx';
 import SectionVotingCharts, { aggregateVotingRows } from './SectionVotingCharts.jsx';
 
 import 'leaflet/dist/leaflet.css';
@@ -181,36 +180,20 @@ function featureHasTerritorial(feature, territorialId) {
 }
 
 export default function VotingMapPage({ year, title, subtitle }) {
-  const { hasPermission } = useAuth();
   const [seccionFilter, setSeccionFilter] = useState('');
   const [distritoFilter, setDistritoFilter] = useState('');
   const [territorialFilter, setTerritorialFilter] = useState('');
   const [layerMode, setLayerMode] = useState('margin');
   const [selectedSeccionId, setSelectedSeccionId] = useState(null);
 
-  const otherYear = year === 2021 ? 2024 : 2021;
-  const canReadOtherYear = hasPermission(`votings.read.${otherYear}`);
-
   const mapSectionsQuery = useQuery({
     queryKey: ['votings', year, 'map-sections'],
     queryFn: year === 2021 ? votingsApi.mapSections2021 : votingsApi.mapSections2024,
   });
 
-  const otherMapSectionsQuery = useQuery({
-    queryKey: ['votings', otherYear, 'map-sections'],
-    queryFn: otherYear === 2021 ? votingsApi.mapSections2021 : votingsApi.mapSections2024,
-    enabled: canReadOtherYear,
-  });
-
   const summaryQuery = useQuery({
     queryKey: ['votings', year, 'summary'],
     queryFn: year === 2021 ? votingsApi.summary2021 : votingsApi.summary2024,
-  });
-
-  const otherSummaryQuery = useQuery({
-    queryKey: ['votings', otherYear, 'summary'],
-    queryFn: otherYear === 2021 ? votingsApi.summary2021 : votingsApi.summary2024,
-    enabled: canReadOtherYear,
   });
 
   const sectionsGeoQuery = useQuery({
@@ -225,16 +208,6 @@ export default function VotingMapPage({ year, title, subtitle }) {
         ? votingsApi.section2021(selectedSeccionId)
         : votingsApi.section2024(selectedSeccionId),
     enabled: selectedSeccionId != null,
-    retry: false,
-  });
-
-  const otherSectionDetailQuery = useQuery({
-    queryKey: ['votings', otherYear, 'section-detail', selectedSeccionId],
-    queryFn: () =>
-      otherYear === 2021
-        ? votingsApi.section2021(selectedSeccionId)
-        : votingsApi.section2024(selectedSeccionId),
-    enabled: selectedSeccionId != null && canReadOtherYear,
     retry: false,
   });
 
@@ -280,14 +253,6 @@ export default function VotingMapPage({ year, title, subtitle }) {
     return map;
   }, [mapSectionsQuery.data]);
 
-  const otherVotingBySeccion = useMemo(() => {
-    const map = new Map();
-    for (const row of otherMapSectionsQuery.data ?? []) {
-      map.set(row.seccion_id, row);
-    }
-    return map;
-  }, [otherMapSectionsQuery.data]);
-
   const counts = useMemo(() => {
     let win = 0;
     let lose = 0;
@@ -328,8 +293,6 @@ export default function VotingMapPage({ year, title, subtitle }) {
 
   const selectedVoting =
     selectedSeccionId != null ? votingBySeccion.get(selectedSeccionId) : null;
-  const otherSelectedVoting =
-    selectedSeccionId != null ? otherVotingBySeccion.get(selectedSeccionId) : null;
 
   const filteredSeccionIds = useMemo(() => {
     if (!filterDistritoNum && !filterTerritorialIdNum) return null;
@@ -372,15 +335,6 @@ export default function VotingMapPage({ year, title, subtitle }) {
         : rows.filter((r) => filteredSeccionIds.has(Number(r.seccion_id)));
     return aggregateVotingRows(filtered);
   }, [mapSectionsQuery.data, filteredSeccionIds]);
-
-  const otherAlcaldiaVoting = useMemo(() => {
-    const rows = otherMapSectionsQuery.data ?? [];
-    const filtered =
-      filteredSeccionIds == null
-        ? rows
-        : rows.filter((r) => filteredSeccionIds.has(Number(r.seccion_id)));
-    return aggregateVotingRows(filtered);
-  }, [otherMapSectionsQuery.data, filteredSeccionIds]);
 
   const selectSeccion = (seccionId) => {
     if (seccionId == null) return;
@@ -676,70 +630,34 @@ export default function VotingMapPage({ year, title, subtitle }) {
       </div>
 
       {selectedSeccionId != null ? (
-        <div className="space-y-4">
-          <SectionVotingCharts
-            year={year}
-            title={`Resultados — Sección ${selectedSeccionId}`}
-            subtitle={
-              [selectedVoting?.coordinacion, selectedVoting?.colonia].filter(Boolean).join(' · ') ||
-              undefined
-            }
-            voting={selectedVoting}
-            detail={sectionDetailQuery.data}
-            detailLoading={sectionDetailQuery.isPending}
-            emptyMessage={`Sección ${selectedSeccionId}: no hay resultados de votación ${year}.`}
-          />
-          {canReadOtherYear && (
-            <SectionVotingCharts
-              year={otherYear}
-              title={`Resultados — Sección ${selectedSeccionId}`}
-              subtitle={
-                [otherSelectedVoting?.coordinacion, otherSelectedVoting?.colonia]
-                  .filter(Boolean)
-                  .join(' · ') || undefined
-              }
-              voting={otherSelectedVoting}
-              detail={otherSectionDetailQuery.data}
-              detailLoading={otherSectionDetailQuery.isPending}
-              emptyMessage={`Sección ${selectedSeccionId}: no hay resultados de votación ${otherYear}.`}
-            />
-          )}
-        </div>
+        <SectionVotingCharts
+          year={year}
+          title={`Resultados — Sección ${selectedSeccionId}`}
+          subtitle={
+            [selectedVoting?.coordinacion, selectedVoting?.colonia].filter(Boolean).join(' · ') ||
+            undefined
+          }
+          voting={selectedVoting}
+          detail={sectionDetailQuery.data}
+          detailLoading={sectionDetailQuery.isPending}
+          emptyMessage={`Sección ${selectedSeccionId}: no hay resultados de votación ${year}.`}
+        />
       ) : (
-        <div className="space-y-4">
-          <SectionVotingCharts
-            year={year}
-            title={aggregateScope.title}
-            subtitle={aggregateScope.subtitle}
-            voting={alcaldiaVoting}
-            detail={
-              aggregateScope.isFullAlcaldia
-                ? {
-                    lista_nominal: summaryQuery.data?.lista_nominal,
-                    total_votos: summaryQuery.data?.total_votos,
-                  }
-                : null
-            }
-            detailLoading={aggregateScope.isFullAlcaldia && summaryQuery.isPending}
-          />
-          {canReadOtherYear && (
-            <SectionVotingCharts
-              year={otherYear}
-              title={aggregateScope.title}
-              subtitle={aggregateScope.subtitle}
-              voting={otherAlcaldiaVoting}
-              detail={
-                aggregateScope.isFullAlcaldia
-                  ? {
-                      lista_nominal: otherSummaryQuery.data?.lista_nominal,
-                      total_votos: otherSummaryQuery.data?.total_votos,
-                    }
-                  : null
-              }
-              detailLoading={aggregateScope.isFullAlcaldia && otherSummaryQuery.isPending}
-            />
-          )}
-        </div>
+        <SectionVotingCharts
+          year={year}
+          title={aggregateScope.title}
+          subtitle={aggregateScope.subtitle}
+          voting={alcaldiaVoting}
+          detail={
+            aggregateScope.isFullAlcaldia
+              ? {
+                  lista_nominal: summaryQuery.data?.lista_nominal,
+                  total_votos: summaryQuery.data?.total_votos,
+                }
+              : null
+          }
+          detailLoading={aggregateScope.isFullAlcaldia && summaryQuery.isPending}
+        />
       )}
     </div>
   );
