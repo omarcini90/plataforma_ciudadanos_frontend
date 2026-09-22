@@ -213,7 +213,12 @@ function DirectoryAuthPhoto({ kind, id, alt }) {
     let objectUrl = null;
     setUrl(null);
     if (!id) return undefined;
-    const fetchPhoto = kind === 'enlace' ? mapsApi.enlacePhoto : mapsApi.promotorPhoto;
+    const fetchPhoto =
+      kind === 'enlace'
+        ? mapsApi.enlacePhoto
+        : kind === 'cot'
+          ? mapsApi.cotPhoto
+          : mapsApi.promotorPhoto;
     fetchPhoto(id)
       .then((blob) => {
         if (!alive) return;
@@ -262,10 +267,10 @@ function DirectorySeccionPanel({ seccionCode }) {
   if (isError || !data) {
     return <p className="text-sm text-slate-500">No se pudo cargar el directorio de esta sección.</p>;
   }
-  if (!data.enlace && !(data.promotores || []).length) {
+  if (!data.enlace && !data.cot && !(data.promotores || []).length) {
     return (
       <p className="text-sm text-slate-500">
-        Sin enlace ni promotores registrados para la sección {seccionCode}.
+        Sin enlace, COT ni promotores registrados para la sección {seccionCode}.
       </p>
     );
   }
@@ -291,6 +296,30 @@ function DirectorySeccionPanel({ seccionCode }) {
             )}
             <div className="min-w-0">
               <p className="font-medium text-slate-900">{data.enlace.name}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {data.cot ? (
+        <section className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">COT</h4>
+          <div className="flex gap-3">
+            {data.cot.has_photo ? (
+              <DirectoryAuthPhoto kind="cot" id={data.cot.id} alt={data.cot.name} />
+            ) : (
+              <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+                Sin foto
+              </div>
+            )}
+            <div className="min-w-0 space-y-1">
+              <p className="font-medium text-slate-900">{data.cot.name}</p>
+              {data.cot.phone ? (
+                <p className="text-sm text-slate-600">{data.cot.phone}</p>
+              ) : null}
+              {data.cot.email ? (
+                <p className="break-all text-sm text-slate-600">{data.cot.email}</p>
+              ) : null}
             </div>
           </div>
         </section>

@@ -124,6 +124,23 @@ export const catalogsApi = {
   },
   clearDirectoryPromotorPhoto: (id) =>
     api.delete(`/catalogs/directory/promotores/${id}/photo`).then((r) => r.data),
+
+  directoryCots: () => api.get('/catalogs/directory/cots').then((r) => r.data),
+  createDirectoryCot: (p) => api.post('/catalogs/directory/cots', p).then((r) => r.data),
+  updateDirectoryCot: (id, p) =>
+    api.put(`/catalogs/directory/cots/${id}`, p).then((r) => r.data),
+  deleteDirectoryCot: (id) => api.delete(`/catalogs/directory/cots/${id}`),
+  directoryCotPhoto: (id) =>
+    api
+      .get(`/catalogs/directory/cots/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
+  uploadDirectoryCotPhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file, file.name || 'photo.jpg');
+    return api.post(`/catalogs/directory/cots/${id}/photo`, fd).then((r) => r.data);
+  },
+  clearDirectoryCotPhoto: (id) =>
+    api.delete(`/catalogs/directory/cots/${id}/photo`).then((r) => r.data),
 };
 
 export const servicesApi = {
@@ -157,6 +174,10 @@ export const mapsApi = {
   promotorPhoto: (id) =>
     api
       .get(`/maps/directory/promotores/${id}/photo`, { responseType: 'blob' })
+      .then((r) => r.data),
+  cotPhoto: (id) =>
+    api
+      .get(`/maps/directory/cots/${id}/photo`, { responseType: 'blob' })
       .then((r) => r.data),
 };
 

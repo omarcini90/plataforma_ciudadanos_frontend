@@ -1669,7 +1669,9 @@ function DirectoryPhotoThumb({ kind, id, hasPhoto, alt, cacheKey = 0 }) {
     const fetchPhoto =
       kind === 'enlace'
         ? catalogsApi.directoryEnlacePhoto
-        : catalogsApi.directoryPromotorPhoto;
+        : kind === 'cot'
+          ? catalogsApi.directoryCotPhoto
+          : catalogsApi.directoryPromotorPhoto;
     fetchPhoto(id)
       .then((blob) => {
         if (!alive) return;
@@ -1756,11 +1758,12 @@ function SeccionMultiSelect({ secciones, value, onChange }) {
   );
 }
 
-/** Gestión editable de enlaces (multi-sección) y promotores (varios por sección). */
+/** Gestión editable de enlaces, COTS (multi-sección) y promotores. */
 function DirectoryCrud() {
   const qc = useQueryClient();
   const ek = ['catalogs', 'directory-enlaces'];
   const pk = ['catalogs', 'directory-promotores'];
+  const ck = ['catalogs', 'directory-cots'];
 
   const { data: enlaces = [], isLoading: loadingEnlaces, dataUpdatedAt: enlacesAt } = useQuery({
     queryKey: ek,
@@ -1769,6 +1772,10 @@ function DirectoryCrud() {
   const { data: promotores = [], isLoading: loadingPromotores, dataUpdatedAt: promotoresAt } = useQuery({
     queryKey: pk,
     queryFn: () => catalogsApi.directoryPromotores(),
+  });
+  const { data: cots = [], isLoading: loadingCots, dataUpdatedAt: cotsAt } = useQuery({
+    queryKey: ck,
+    queryFn: () => catalogsApi.directoryCots(),
   });
   const { data: secciones = [] } = useQuery({
     queryKey: ['catalogs', 'secciones-table'],
@@ -1783,6 +1790,7 @@ function DirectoryCrud() {
   const [view, setView] = useState('enlaces');
   const [enlaceDialog, setEnlaceDialog] = useState(null);
   const [promotorDialog, setPromotorDialog] = useState(null);
+  const [cotDialog, setCotDialog] = useState(null);
   const [enlaceForm, setEnlaceForm] = useState({ full_name: '', seccion_ids: [] });
   const [promotorForm, setPromotorForm] = useState({
     full_name: '',
@@ -1791,6 +1799,13 @@ function DirectoryCrud() {
     email: '',
     colonia: '',
     enlace_id: '',
+  });
+  const [cotForm, setCotForm] = useState({
+    full_name: '',
+    address: '',
+    phone: '',
+    email: '',
+    seccion_ids: [],
   });
   const [filterQ, setFilterQ] = useState('');
   const [photoCrop, setPhotoCrop] = useState(null); // { kind, id, name, imageSrc }
@@ -1809,6 +1824,7 @@ function DirectoryCrud() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ek });
     qc.invalidateQueries({ queryKey: pk });
+    qc.invalidateQueries({ queryKey: ck });
     qc.invalidateQueries({ queryKey: ['map-directory'] });
   };
 
@@ -1907,6 +1923,58 @@ function DirectoryCrud() {
     },
   });
 
+  const createCot = useMutation({
+    mutationFn: () =>
+      catalogsApi.createDirectoryCot({
+        full_name: cotForm.full_name.trim(),
+        address: cotForm.address.trim() || null,
+        phone: cotForm.phone.trim() || null,
+        email: cotForm.email.trim() || null,
+        seccion_ids: cotForm.seccion_ids,
+      }),
+    onSuccess: () => {
+      toast.success('COT registrado');
+      setCotDialog(null);
+      invalidate();
+    },
+  });
+
+  const updateCot = useMutation({
+    mutationFn: () =>
+      catalogsApi.updateDirectoryCot(cotDialog.id, {
+        full_name: cotForm.full_name.trim(),
+        address: cotForm.address.trim() || null,
+        phone: cotForm.phone.trim() || null,
+        email: cotForm.email.trim() || null,
+        seccion_ids: cotForm.seccion_ids,
+        clear_address: !cotForm.address.trim(),
+        clear_phone: !cotForm.phone.trim(),
+        clear_email: !cotForm.email.trim(),
+      }),
+    onSuccess: () => {
+      toast.success('COT actualizado');
+      setCotDialog(null);
+      invalidate();
+    },
+  });
+
+  const deleteCot = useMutation({
+    mutationFn: (id) => catalogsApi.deleteDirectoryCot(id),
+    onSuccess: () => {
+      toast.success('COT eliminado');
+      invalidate();
+    },
+  });
+
+  const uploadCotPhoto = useMutation({
+    mutationFn: ({ id, file }) => catalogsApi.uploadDirectoryCotPhoto(id, file),
+    onSuccess: () => {
+      toast.success('Foto de COT actualizada');
+      closePhotoCrop();
+      invalidate();
+    },
+  });
+
   const openCreateEnlace = () => {
     setEnlaceForm({ full_name: '', seccion_ids: [] });
     setEnlaceDialog({ mode: 'create' });
@@ -1944,6 +2012,22 @@ function DirectoryCrud() {
     setPromotorDialog({ mode: 'edit', id: p.id, has_photo: p.has_photo });
   };
 
+  const openCreateCot = () => {
+    setCotForm({ full_name: '', address: '', phone: '', email: '', seccion_ids: [] });
+    setCotDialog({ mode: 'create' });
+  };
+
+  const openEditCot = (c) => {
+    setCotForm({
+      full_name: c.full_name || '',
+      address: c.address || '',
+      phone: c.phone || '',
+      email: c.email || '',
+      seccion_ids: [...(c.seccion_ids || [])],
+    });
+    setCotDialog({ mode: 'edit', id: c.id, has_photo: c.has_photo });
+  };
+
   const filteredEnlaces = useMemo(() => {
     const term = filterQ.trim().toLowerCase();
     if (!term) return enlaces;
@@ -1966,14 +2050,52 @@ function DirectoryCrud() {
     );
   }, [promotores, filterQ]);
 
+  const filteredCots = useMemo(() => {
+    const term = filterQ.trim().toLowerCase();
+    if (!term) return cots;
+    return cots.filter(
+      (c) =>
+        c.full_name.toLowerCase().includes(term) ||
+        (c.address || '').toLowerCase().includes(term) ||
+        (c.phone || '').toLowerCase().includes(term) ||
+        (c.email || '').toLowerCase().includes(term) ||
+        (c.seccion_ids || []).some((s) => String(s).includes(term)),
+    );
+  }, [cots, filterQ]);
+
+  const addButton =
+    view === 'enlaces' ? (
+      <BtnPrimaryIcon title="Nuevo enlace" onClick={openCreateEnlace}>
+        <IconPlus size={18} stroke={1.75} aria-hidden />
+        Agregar enlace
+      </BtnPrimaryIcon>
+    ) : view === 'cots' ? (
+      <BtnPrimaryIcon title="Nuevo COT" onClick={openCreateCot}>
+        <IconPlus size={18} stroke={1.75} aria-hidden />
+        Agregar COT
+      </BtnPrimaryIcon>
+    ) : (
+      <BtnPrimaryIcon title="Nuevo promotor" onClick={openCreatePromotor}>
+        <IconPlus size={18} stroke={1.75} aria-hidden />
+        Agregar promotor
+      </BtnPrimaryIcon>
+    );
+
+  const searchPlaceholder =
+    view === 'enlaces'
+      ? 'Buscar enlace o sección…'
+      : view === 'cots'
+        ? 'Buscar COT, sección, teléfono…'
+        : 'Buscar promotor, sección o colonia…';
+
   return (
     <div className="card space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-slate-800">Directorio operativo</h3>
           <p className="text-sm text-slate-500 mt-1">
-            Un enlace cubre varias secciones; una sección puede tener varios promotores. Los cambios
-            se ven en el mapa al hacer clic en el polígono.
+            Enlaces y COTS cubren varias secciones; una sección puede tener varios promotores. Los
+            cambios se ven en el mapa al hacer clic en el polígono.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1990,6 +2112,15 @@ function DirectoryCrud() {
             <button
               type="button"
               className={`px-3 py-1.5 text-sm rounded-md ${
+                view === 'cots' ? 'bg-white shadow-sm text-brand-800 font-medium' : 'text-slate-600'
+              }`}
+              onClick={() => setView('cots')}
+            >
+              COTS ({cots.length})
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm rounded-md ${
                 view === 'promotores'
                   ? 'bg-white shadow-sm text-brand-800 font-medium'
                   : 'text-slate-600'
@@ -1999,26 +2130,14 @@ function DirectoryCrud() {
               Promotores ({promotores.length})
             </button>
           </div>
-          {view === 'enlaces' ? (
-            <BtnPrimaryIcon title="Nuevo enlace" onClick={openCreateEnlace}>
-              <IconPlus size={18} stroke={1.75} aria-hidden />
-              Agregar enlace
-            </BtnPrimaryIcon>
-          ) : (
-            <BtnPrimaryIcon title="Nuevo promotor" onClick={openCreatePromotor}>
-              <IconPlus size={18} stroke={1.75} aria-hidden />
-              Agregar promotor
-            </BtnPrimaryIcon>
-          )}
+          {addButton}
         </div>
       </div>
 
       <div>
         <input
           className="input max-w-md"
-          placeholder={
-            view === 'enlaces' ? 'Buscar enlace o sección…' : 'Buscar promotor, sección o colonia…'
-          }
+          placeholder={searchPlaceholder}
           value={filterQ}
           onChange={(e) => setFilterQ(e.target.value)}
         />
@@ -2099,6 +2218,105 @@ function DirectoryCrud() {
                         onClick={() => {
                           if (window.confirm(`¿Eliminar el enlace "${e.full_name}"?`)) {
                             deleteEnlace.mutate(e.id);
+                          }
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : view === 'cots' ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-slate-600 border-b">
+              <tr>
+                <th className="px-3 py-2" title="Foto">
+                  <IconPhoto size={18} stroke={1.75} className="text-slate-500" aria-hidden />
+                  <span className="sr-only">Foto</span>
+                </th>
+                <th className="px-3 py-2">COT</th>
+                <th className="px-3 py-2">Secciones</th>
+                <th className="px-3 py-2">Contacto</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingCots && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                    Cargando…
+                  </td>
+                </tr>
+              )}
+              {!loadingCots && filteredCots.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                    Sin COTS
+                  </td>
+                </tr>
+              )}
+              {filteredCots.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-3 py-2">
+                    <DirectoryPhotoThumb
+                      kind="cot"
+                      id={c.id}
+                      hasPhoto={c.has_photo}
+                      alt={c.full_name}
+                      cacheKey={cotsAt}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-slate-800">{c.full_name}</p>
+                    {c.address ? (
+                      <p className="text-xs text-slate-500 mt-0.5">{c.address}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {(c.seccion_ids || []).length
+                      ? (c.seccion_ids || []).slice(0, 12).join(', ') +
+                        ((c.seccion_ids || []).length > 12
+                          ? ` (+${(c.seccion_ids || []).length - 12})`
+                          : '')
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    <div className="space-y-0.5">
+                      {c.phone ? <p>{c.phone}</p> : null}
+                      {c.email ? <p className="break-all text-xs">{c.email}</p> : null}
+                      {!c.phone && !c.email ? '—' : null}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <label className="inline-flex cursor-pointer" title="Subir foto">
+                        <span className="sr-only">Subir foto</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(ev) => {
+                            const file = ev.target.files?.[0];
+                            if (file) openPhotoCrop('cot', c.id, c.full_name, file);
+                            ev.target.value = '';
+                          }}
+                        />
+                        <span
+                          className={`${iconBtnBase} ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50`}
+                          aria-hidden
+                        >
+                          <IconPhoto size={18} stroke={1.75} />
+                        </span>
+                      </label>
+                      <EditIconButton onClick={() => openEditCot(c)} />
+                      <DeleteIconButton
+                        title="Eliminar COT"
+                        onClick={() => {
+                          if (window.confirm(`¿Eliminar el COT "${c.full_name}"?`)) {
+                            deleteCot.mutate(c.id);
                           }
                         }}
                       />
@@ -2249,6 +2467,80 @@ function DirectoryCrud() {
         </CatalogModal>
       )}
 
+      {cotDialog && (
+        <CatalogModal
+          wide
+          title={cotDialog.mode === 'create' ? 'Nuevo COT' : 'Editar COT'}
+          onClose={() => setCotDialog(null)}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="label">Nombre completo</label>
+              <input
+                className="input"
+                value={cotForm.full_name}
+                onChange={(e) => setCotForm((f) => ({ ...f, full_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="label">Dirección</label>
+              <input
+                className="input"
+                value={cotForm.address}
+                onChange={(e) => setCotForm((f) => ({ ...f, address: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Teléfono</label>
+                <input
+                  className="input"
+                  value={cotForm.phone}
+                  onChange={(e) => setCotForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Correo</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={cotForm.email}
+                  onChange={(e) => setCotForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label">Secciones a cargo</label>
+              <SeccionMultiSelect
+                secciones={seccionesSorted}
+                value={cotForm.seccion_ids}
+                onChange={(ids) => setCotForm((f) => ({ ...f, seccion_ids: ids }))}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg text-sm ring-1 ring-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                onClick={() => setCotDialog(null)}
+              >
+                Cancelar
+              </button>
+              <BtnPrimaryIcon
+                disabled={
+                  !cotForm.full_name.trim() || createCot.isPending || updateCot.isPending
+                }
+                onClick={() =>
+                  cotDialog.mode === 'create' ? createCot.mutate() : updateCot.mutate()
+                }
+              >
+                <IconDeviceFloppy size={18} stroke={1.75} aria-hidden />
+                Guardar
+              </BtnPrimaryIcon>
+            </div>
+          </div>
+        </CatalogModal>
+      )}
+
       {promotorDialog && (
         <CatalogModal
           wide
@@ -2365,15 +2657,28 @@ function DirectoryCrud() {
         imageSrc={photoCrop?.imageSrc}
         title={
           photoCrop
-            ? `Ajustar foto · ${photoCrop.name || (photoCrop.kind === 'enlace' ? 'Enlace' : 'Promotor')}`
+            ? `Ajustar foto · ${
+                photoCrop.name ||
+                (photoCrop.kind === 'enlace'
+                  ? 'Enlace'
+                  : photoCrop.kind === 'cot'
+                    ? 'COT'
+                    : 'Promotor')
+              }`
             : 'Ajustar foto'
         }
-        saving={uploadEnlacePhoto.isPending || uploadPromotorPhoto.isPending}
+        saving={
+          uploadEnlacePhoto.isPending ||
+          uploadPromotorPhoto.isPending ||
+          uploadCotPhoto.isPending
+        }
         onCancel={closePhotoCrop}
         onConfirm={async (file) => {
           if (!photoCrop) return;
           if (photoCrop.kind === 'enlace') {
             await uploadEnlacePhoto.mutateAsync({ id: photoCrop.id, file });
+          } else if (photoCrop.kind === 'cot') {
+            await uploadCotPhoto.mutateAsync({ id: photoCrop.id, file });
           } else {
             await uploadPromotorPhoto.mutateAsync({ id: photoCrop.id, file });
           }
