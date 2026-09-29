@@ -156,7 +156,8 @@ const SECTION_STYLE = {
 
 const PROGRAM_MARKER_COLOR = '#7c3aed';
 
-/** Clustering solo en vista de alcaldía; con filtro por sección los puntos van sueltos. */
+/** Clustering solo en vista de alcaldía; con filtro por sección los puntos van sueltos.
+ *  Los apoyos se agrupan aparte, un clúster por programa. */
 const CLUSTER_OPTIONS = {
   chunkedLoading: true,
   chunkInterval: 50,
@@ -167,9 +168,67 @@ const CLUSTER_OPTIONS = {
   removeOutsideVisibleBounds: true,
 };
 
-function OptionalCluster({ enabled, children }) {
+function OptionalCluster({ enabled, children, clusterOptions }) {
   if (!enabled) return <LayerGroup>{children}</LayerGroup>;
-  return <MarkerClusterGroup {...CLUSTER_OPTIONS}>{children}</MarkerClusterGroup>;
+  return (
+    <MarkerClusterGroup {...CLUSTER_OPTIONS} {...clusterOptions}>
+      {children}
+    </MarkerClusterGroup>
+  );
+}
+
+const programClusterIconCache = new Map();
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildProgramClusterIcon(color, count, name) {
+  const safeColor = color || PROGRAM_MARKER_COLOR;
+  const label = name || 'Programa';
+  const key = `${safeColor}|${count}|${label}`;
+  let icon = programClusterIconCache.get(key);
+  if (!icon) {
+    const size = count >= 1000 ? 52 : count >= 100 ? 46 : count >= 10 ? 40 : 34;
+    const fontSize = count >= 1000 ? 12 : 13;
+    icon = L.divIcon({
+      className: 'program-cluster-icon',
+      html: `<div title="${escapeHtmlAttr(label)}" style="width:${size}px;height:${size}px;border-radius:50%;background:${safeColor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fontSize}px;border:2px solid #fff;box-shadow:0 0 0 1px ${safeColor}, 0 2px 6px rgba(15,23,42,.35);line-height:1">${count}</div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+    programClusterIconCache.set(key, icon);
+  }
+  return icon;
+}
+
+function ProgramMarkerLayer({ group, clusterMarkers, onSelectCitizen }) {
+  const iconCreateFunction = useCallback(
+    (cluster) => buildProgramClusterIcon(group.color, cluster.getChildCount(), group.name),
+    [group.color, group.name],
+  );
+
+  return (
+    <OptionalCluster
+      enabled={clusterMarkers}
+      clusterOptions={{ iconCreateFunction }}
+    >
+      {group.markers.map((m) => (
+        <Marker
+          key={`prog-${group.id}-${m.citizen_id}`}
+          position={[Number(m.latitud), Number(m.longitud)]}
+          icon={buildProgramMarkerIcon(m.color || group.color || PROGRAM_MARKER_COLOR)}
+          eventHandlers={{
+            click: () => onSelectCitizen(m.citizen_id),
+          }}
+        />
+      ))}
+    </OptionalCluster>
+  );
 }
 
 const serviceIconCache = new Map();
@@ -850,6 +909,28 @@ export default function MapPage() {
     () => programsMapQuery.data?.markers ?? [],
     [programsMapQuery.data],
   );
+  const programMarkerGroups = useMemo(() => {
+    const groups = new Map();
+    for (const marker of mapProgramMarkers) {
+      const id = marker.program_id ?? 'none';
+      let group = groups.get(id);
+      if (!group) {
+        group = {
+          id,
+          name:
+            marker.program_name ||
+            (marker.program_id != null ? `Programa #${marker.program_id}` : 'Sin programa'),
+          color: marker.color || PROGRAM_MARKER_COLOR,
+          markers: [],
+        };
+        groups.set(id, group);
+      }
+      group.markers.push(marker);
+    }
+    return [...groups.values()].sort(
+      (a, b) => b.markers.length - a.markers.length || a.name.localeCompare(b.name, 'es'),
+    );
+  }, [mapProgramMarkers]);
   const sectionsGeo = sectionsQuery.data;
   const sectionInput = mapFilters.seccion_electoral.trim();
   const sectionFilter = debouncedSeccion;
@@ -1641,20 +1722,15 @@ export default function MapPage() {
               ))}
             </OptionalCluster>
           )}
-          {showPrograms && (
-            <OptionalCluster key={`prog-${clusterMarkers ? 'cluster' : 'raw'}`} enabled={clusterMarkers}>
-              {mapProgramMarkers.map((m) => (
-                <Marker
-                  key={`prog-citizen-${m.citizen_id}`}
-                  position={[Number(m.latitud), Number(m.longitud)]}
-                  icon={buildProgramMarkerIcon(m.color || PROGRAM_MARKER_COLOR)}
-                  eventHandlers={{
-                    click: () => onSelectCitizen(m.citizen_id),
-                  }}
-                />
-              ))}
-            </OptionalCluster>
-          )}
+          {showPrograms &&
+            programMarkerGroups.map((group) => (
+              <ProgramMarkerLayer
+                key={`prog-${clusterMarkers ? 'cluster' : 'raw'}-${group.id}-${group.color}`}
+                group={group}
+                clusterMarkers={clusterMarkers}
+                onSelectCitizen={onSelectCitizen}
+              />
+            ))}
         </MapContainer>
       </div>
 
