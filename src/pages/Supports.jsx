@@ -11,6 +11,12 @@ import {
 } from '@tabler/icons-react';
 import { supportsApi } from '../api/index.js';
 import { useAuth } from '../hooks/useAuth.jsx';
+import {
+  homologatedSupportTypes,
+  programHasSupportType,
+  programsForSupportType,
+  supportTypeKey,
+} from '../utils/supportTypeFilters.js';
 
 const iconBtnBase =
   'inline-flex shrink-0 items-center justify-center rounded-lg p-1.5 transition-colors disabled:opacity-40 disabled:pointer-events-none';
@@ -91,7 +97,7 @@ export default function SupportsPage() {
   const canDelete = hasPermission('supports.write');
 
   const [filterProgramId, setFilterProgramId] = useState('');
-  const [filterTypeId, setFilterTypeId] = useState('');
+  const [filterTypeName, setFilterTypeName] = useState('');
 
   const [programModal, setProgramModal] = useState(null);
   const [typeModal, setTypeModal] = useState(null);
@@ -107,17 +113,21 @@ export default function SupportsPage() {
     queryFn: supportsApi.types,
   });
 
-  const typesForApoyoFilter = useMemo(() => {
-    if (!filterProgramId) return types;
-    const pid = Number(filterProgramId);
-    return types.filter((t) => (t.program_id ?? null) === pid);
-  }, [types, filterProgramId]);
+  const visiblePrograms = useMemo(
+    () => programsForSupportType(programs, types, filterTypeName),
+    [programs, types, filterTypeName],
+  );
+  const visibleSupportTypes = useMemo(
+    () => homologatedSupportTypes(types, filterProgramId ? Number(filterProgramId) : null),
+    [types, filterProgramId],
+  );
 
   useEffect(() => {
-    if (!filterTypeId) return;
-    const ok = typesForApoyoFilter.some((t) => String(t.id) === filterTypeId);
-    if (!ok) setFilterTypeId('');
-  }, [filterTypeId, typesForApoyoFilter]);
+    if (!filterProgramId || !filterTypeName || !types.length) return;
+    if (!programHasSupportType(types, filterProgramId, filterTypeName)) {
+      setFilterTypeName('');
+    }
+  }, [filterProgramId, filterTypeName, types]);
 
   /** Tipos de apoyo tras filtros (ordenados). */
   const filteredRows = useMemo(() => {
@@ -126,8 +136,9 @@ export default function SupportsPage() {
       const pid = Number(filterProgramId);
       list = list.filter((t) => (t.program_id ?? null) === pid);
     }
-    if (filterTypeId) {
-      list = list.filter((t) => String(t.id) === filterTypeId);
+    if (filterTypeName) {
+      const key = supportTypeKey(filterTypeName);
+      list = list.filter((t) => supportTypeKey(t.name) === key);
     }
     return [...list].sort((a, b) => {
       const pa = programs.find((p) => p.id === a.program_id)?.name ?? '';
@@ -135,11 +146,11 @@ export default function SupportsPage() {
       if (pa !== pb) return pa.localeCompare(pb, 'es');
       return a.name.localeCompare(b.name, 'es');
     });
-  }, [types, filterProgramId, filterTypeId, programs]);
+  }, [types, filterProgramId, filterTypeName, programs]);
 
   /** Programas que no tienen ningún tipo (para poder editarlos/eliminarlos). */
   const orphanPrograms = useMemo(() => {
-    if (filterTypeId) return [];
+    if (filterTypeName) return [];
     const used = new Set(types.map((t) => t.program_id).filter((id) => id != null));
     let list = programs.filter((p) => !used.has(p.id));
     if (filterProgramId) {
@@ -147,7 +158,7 @@ export default function SupportsPage() {
       list = list.filter((p) => p.id === pid);
     }
     return [...list].sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  }, [programs, types, filterProgramId, filterTypeId]);
+  }, [programs, types, filterProgramId, filterTypeName]);
 
   const programById = useMemo(() => {
     const m = new Map();
@@ -307,10 +318,10 @@ export default function SupportsPage() {
 
   const clearFilters = () => {
     setFilterProgramId('');
-    setFilterTypeId('');
+    setFilterTypeName('');
   };
 
-  const filtersActive = Boolean(filterProgramId || filterTypeId);
+  const filtersActive = Boolean(filterProgramId || filterTypeName);
   const loading = programsQuery.isLoading || typesQuery.isLoading;
 
   return (
@@ -340,7 +351,9 @@ export default function SupportsPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-semibold text-slate-800">Filtros</h3>
-            <p className="text-sm text-slate-500">Por programa y tipo de apoyo.</p>
+            <p className="text-sm text-slate-500">
+              Un programa muestra sus apoyos. Un tipo de apoyo muestra los programas que lo comparten.
+            </p>
           </div>
           {filtersActive && (
             <button
@@ -359,12 +372,21 @@ export default function SupportsPage() {
               className="input"
               value={filterProgramId}
               onChange={(e) => {
-                setFilterProgramId(e.target.value);
-                setFilterTypeId('');
+                const programId = e.target.value;
+                setFilterProgramId(programId);
+                if (
+                  filterTypeName &&
+                  programId &&
+                  !programHasSupportType(types, programId, filterTypeName)
+                ) {
+                  setFilterTypeName('');
+                }
               }}
             >
-              <option value="">Todos los programas</option>
-              {programs.map((p) => (
+              <option value="">
+                {filterTypeName ? 'Todos con este apoyo' : 'Todos los programas'}
+              </option>
+              {visiblePrograms.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                   {!p.is_active ? ' (inactivo)' : ''}
@@ -376,14 +398,26 @@ export default function SupportsPage() {
             <label className="label">Apoyo (tipo)</label>
             <select
               className="input"
-              value={filterTypeId}
-              onChange={(e) => setFilterTypeId(e.target.value)}
+              value={filterTypeName}
+              onChange={(e) => {
+                const typeName = e.target.value;
+                setFilterTypeName(typeName);
+                if (
+                  typeName &&
+                  filterProgramId &&
+                  !programHasSupportType(types, filterProgramId, typeName)
+                ) {
+                  setFilterProgramId('');
+                }
+              }}
             >
-              <option value="">Todos los apoyos</option>
-              {typesForApoyoFilter.map((t) => (
-                <option key={t.id} value={t.id}>
+              <option value="">
+                {filterProgramId ? 'Todos en el programa' : 'Todos los apoyos'}
+              </option>
+              {visibleSupportTypes.map((t) => (
+                <option key={t.key} value={t.name}>
                   {t.name}
-                  {!t.is_active ? ' (inactivo)' : ''}
+                  {!t.active ? ' (inactivo)' : ''}
                 </option>
               ))}
             </select>
