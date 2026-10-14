@@ -6,12 +6,6 @@ import { GeoJSON, LayerGroup, MapContainer, Marker, TileLayer, useMap } from 're
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import { catalogsApi, mapsApi, supportsApi } from '../api/index.js';
-import {
-  homologatedSupportTypes,
-  programHasSupportType,
-  programsForSupportType,
-  supportFilterParams,
-} from '../utils/supportTypeFilters.js';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -551,9 +545,9 @@ export default function MapPage() {
     operational_area_id: '',
     operational_area_offering_id: '',
     priority: '',
-      program_id: '',
-      support_type_name: '',
-    });
+    program_id: '',
+    support_type_id: '',
+  });
   const [debouncedCurp, setDebouncedCurp] = useState('');
   useEffect(() => {
     const id = setTimeout(() => setDebouncedCurp(mapFilters.curp.trim()), 350);
@@ -712,20 +706,14 @@ export default function MapPage() {
   });
 
   const filterProgramIdNum = mapFilters.program_id ? Number(mapFilters.program_id) : null;
-  const filterSupportTypeName = String(mapFilters.support_type_name || '').trim();
-  const supportParams = useMemo(
-    () => supportFilterParams(filterProgramIdNum, filterSupportTypeName),
-    [filterProgramIdNum, filterSupportTypeName],
-  );
+  const filterSupportTypeIdNum = mapFilters.support_type_id
+    ? Number(mapFilters.support_type_id)
+    : null;
 
-  const visiblePrograms = useMemo(
-    () => programsForSupportType(supportPrograms, supportTypes, filterSupportTypeName),
-    [supportPrograms, supportTypes, filterSupportTypeName],
-  );
-  const visibleSupportTypes = useMemo(
-    () => homologatedSupportTypes(supportTypes, filterProgramIdNum),
-    [supportTypes, filterProgramIdNum],
-  );
+  const programTypesFiltered = useMemo(() => {
+    if (!filterProgramIdNum) return supportTypes;
+    return supportTypes.filter((t) => t.program_id === filterProgramIdNum);
+  }, [supportTypes, filterProgramIdNum]);
 
   const programMarkerParams = useMemo(() => {
     const p = { limit: 5000 };
@@ -736,7 +724,9 @@ export default function MapPage() {
     if (debouncedSeccion) p.seccion_electoral = debouncedSeccion;
     if (debouncedColonia) p.colonia = debouncedColonia;
     if (debouncedDireccion) p.direccion = debouncedDireccion;
-    return { ...p, ...supportParams };
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
+    return p;
   }, [
     debouncedCurp,
     debouncedSeccion,
@@ -745,7 +735,8 @@ export default function MapPage() {
     debouncedMunicipio,
     filterDistritoNum,
     filterTerritorialIdNum,
-    supportParams,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
   ]);
 
   const programsMapQuery = useQuery({
@@ -770,7 +761,9 @@ export default function MapPage() {
     if (mapFilters.operational_area_offering_id)
       p.operational_area_offering_id = Number(mapFilters.operational_area_offering_id);
     if (mapFilters.priority) p.priority = mapFilters.priority;
-    return { ...p, ...supportParams };
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
+    return p;
   }, [
     debouncedCurp,
     debouncedSeccion,
@@ -783,7 +776,8 @@ export default function MapPage() {
     filterAreaIdNum,
     filterDistritoNum,
     filterTerritorialIdNum,
-    supportParams,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
   ]);
 
   const statsQuery = useQuery({
@@ -801,7 +795,9 @@ export default function MapPage() {
     if (filterTerritorialIdNum) p.territorial_id = filterTerritorialIdNum;
     if (debouncedColonia) p.colonia = debouncedColonia;
     if (debouncedDireccion) p.direccion = debouncedDireccion;
-    return { ...p, ...supportParams };
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
+    return p;
   }, [
     citizenListPage,
     debouncedSeccion,
@@ -811,7 +807,8 @@ export default function MapPage() {
     filterTerritorialIdNum,
     debouncedColonia,
     debouncedDireccion,
-    supportParams,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
   ]);
 
   const citizenListFilterKey = useMemo(
@@ -825,7 +822,7 @@ export default function MapPage() {
         colonia: debouncedColonia,
         direccion: debouncedDireccion,
         program: filterProgramIdNum,
-        supportType: filterSupportTypeName,
+        supportType: filterSupportTypeIdNum,
       }),
     [
       debouncedSeccion,
@@ -836,7 +833,7 @@ export default function MapPage() {
       debouncedColonia,
       debouncedDireccion,
       filterProgramIdNum,
-      filterSupportTypeName,
+      filterSupportTypeIdNum,
     ],
   );
 
@@ -866,7 +863,7 @@ export default function MapPage() {
     Boolean(mapFilters.operational_area_offering_id) ||
     Boolean(mapFilters.priority) ||
     Boolean(filterProgramIdNum) ||
-    Boolean(filterSupportTypeName);
+    Boolean(filterSupportTypeIdNum);
 
   const locationFilterCount =
     Number(Boolean(debouncedCurp || mapFilters.curp.trim())) +
@@ -882,7 +879,7 @@ export default function MapPage() {
     Number(Boolean(mapFilters.operational_area_offering_id)) +
     Number(Boolean(mapFilters.priority));
   const programFilterCount =
-    Number(Boolean(filterProgramIdNum)) + Number(Boolean(filterSupportTypeName));
+    Number(Boolean(filterProgramIdNum)) + Number(Boolean(filterSupportTypeIdNum));
 
   const clearMapFilters = () => {
     setMapFilters({
@@ -898,7 +895,7 @@ export default function MapPage() {
       operational_area_offering_id: '',
       priority: '',
       program_id: '',
-      support_type_name: '',
+      support_type_id: '',
     });
     setDebouncedCurp('');
     setDebouncedSeccion('');
@@ -1344,7 +1341,7 @@ export default function MapPage() {
 
             <MapFilterAccordion
               title="Programas y apoyos"
-              hint="Un programa muestra sus apoyos. Un tipo de apoyo muestra los programas que lo comparten."
+              hint="Programa o tipo de apoyo"
               defaultOpen={programFilterCount > 0}
               badge={
                 programFilterCount
@@ -1358,25 +1355,16 @@ export default function MapPage() {
                   <select
                     className="input"
                     value={mapFilters.program_id}
-                    onChange={(e) => {
-                      const programId = e.target.value;
+                    onChange={(e) =>
                       setMapFilters((f) => ({
                         ...f,
-                        program_id: programId,
-                        support_type_name: programHasSupportType(
-                          supportTypes,
-                          programId,
-                          f.support_type_name,
-                        )
-                          ? f.support_type_name
-                          : '',
-                      }));
-                    }}
+                        program_id: e.target.value,
+                        support_type_id: '',
+                      }))
+                    }
                   >
-                    <option value="">
-                      {filterSupportTypeName ? 'Todos con este apoyo' : 'Todos los programas'}
-                    </option>
-                    {visiblePrograms.map((p) => (
+                    <option value="">Todos los programas</option>
+                    {supportPrograms.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
@@ -1387,24 +1375,17 @@ export default function MapPage() {
                   <label className="label">Tipo de apoyo</label>
                   <select
                     className="input"
-                    value={mapFilters.support_type_name}
-                    disabled={!visibleSupportTypes.length}
-                    onChange={(e) => {
-                      const typeName = e.target.value;
-                      setMapFilters((f) => ({
-                        ...f,
-                        support_type_name: typeName,
-                        program_id: programHasSupportType(supportTypes, f.program_id, typeName)
-                          ? f.program_id
-                          : '',
-                      }));
-                    }}
+                    value={mapFilters.support_type_id}
+                    disabled={!programTypesFiltered.length}
+                    onChange={(e) =>
+                      setMapFilters((f) => ({ ...f, support_type_id: e.target.value }))
+                    }
                   >
                     <option value="">
                       {filterProgramIdNum ? 'Todos en el programa' : 'Todos los tipos'}
                     </option>
-                    {visibleSupportTypes.map((t) => (
-                      <option key={t.key} value={t.name}>
+                    {programTypesFiltered.map((t) => (
+                      <option key={t.id} value={t.id}>
                         {t.name}
                       </option>
                     ))}
@@ -1498,20 +1479,11 @@ export default function MapPage() {
                             onClick={() => {
                               if (!programId) return;
                               setShowPrograms(true);
-                              setMapFilters((f) => {
-                                const nextProgram = f.program_id === programId ? '' : programId;
-                                return {
-                                  ...f,
-                                  program_id: nextProgram,
-                                  support_type_name: programHasSupportType(
-                                    supportTypes,
-                                    nextProgram,
-                                    f.support_type_name,
-                                  )
-                                    ? f.support_type_name
-                                    : '',
-                                };
-                              });
+                              setMapFilters((f) => ({
+                                ...f,
+                                program_id: f.program_id === programId ? '' : programId,
+                                support_type_id: '',
+                              }));
                             }}
                             className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:brightness-95 disabled:cursor-default ${
                               selected ? 'ring-2 ring-inset ring-brand-600' : ''

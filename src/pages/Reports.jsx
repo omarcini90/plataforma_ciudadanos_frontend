@@ -5,12 +5,6 @@ import { IconDownload, IconFileSpreadsheet } from '@tabler/icons-react';
 import CitizenFichaPanel from '../components/CitizenFichaPanel.jsx';
 import SlidePanel from '../components/SlidePanel.jsx';
 import { catalogsApi, reportsApi, supportsApi } from '../api/index.js';
-import {
-  homologatedSupportTypes,
-  programHasSupportType,
-  programsForSupportType,
-  supportFilterParams,
-} from '../utils/supportTypeFilters.js';
 
 const emptyFilters = {
   q: '',
@@ -21,7 +15,7 @@ const emptyFilters = {
   direccion: '',
   codigo_postal: '',
   program_id: '',
-  support_type_name: '',
+  support_type_id: '',
   operational_area_id: '',
   operational_area_offering_id: '',
   is_active: 'true',
@@ -71,11 +65,7 @@ export default function ReportsPage() {
 
   const filterAreaIdNum = filters.operational_area_id ? Number(filters.operational_area_id) : null;
   const filterProgramIdNum = filters.program_id ? Number(filters.program_id) : null;
-  const filterSupportTypeName = String(filters.support_type_name || '').trim();
-  const supportParams = useMemo(
-    () => supportFilterParams(filterProgramIdNum, filterSupportTypeName),
-    [filterProgramIdNum, filterSupportTypeName],
-  );
+  const filterSupportTypeIdNum = filters.support_type_id ? Number(filters.support_type_id) : null;
   const filterOfferingIdNum = filters.operational_area_offering_id
     ? Number(filters.operational_area_offering_id)
     : null;
@@ -89,7 +79,8 @@ export default function ReportsPage() {
     if (filters.colonia.trim()) p.colonia = filters.colonia.trim();
     if (filters.direccion.trim()) p.direccion = filters.direccion.trim();
     if (filters.codigo_postal.trim()) p.codigo_postal = filters.codigo_postal.trim();
-    Object.assign(p, supportParams);
+    if (filterProgramIdNum) p.program_id = filterProgramIdNum;
+    if (filterSupportTypeIdNum) p.support_type_id = filterSupportTypeIdNum;
     if (filterAreaIdNum) p.operational_area_id = filterAreaIdNum;
     if (filterOfferingIdNum) p.operational_area_offering_id = filterOfferingIdNum;
     if (filters.is_active === 'true') p.is_active = true;
@@ -106,7 +97,8 @@ export default function ReportsPage() {
     filters.direccion,
     filters.codigo_postal,
     filters.is_active,
-    supportParams,
+    filterProgramIdNum,
+    filterSupportTypeIdNum,
     filterAreaIdNum,
     filterOfferingIdNum,
   ]);
@@ -199,14 +191,10 @@ export default function ReportsPage() {
     [colonias],
   );
 
-  const visiblePrograms = useMemo(
-    () => programsForSupportType(supportPrograms, supportTypes, filterSupportTypeName),
-    [supportPrograms, supportTypes, filterSupportTypeName],
-  );
-  const visibleSupportTypes = useMemo(
-    () => homologatedSupportTypes(supportTypes, filterProgramIdNum),
-    [supportTypes, filterProgramIdNum],
-  );
+  const programTypesFiltered = useMemo(() => {
+    if (!filterProgramIdNum) return supportTypes;
+    return supportTypes.filter((t) => t.program_id === filterProgramIdNum);
+  }, [supportTypes, filterProgramIdNum]);
 
   const hasActiveFilters =
     Boolean(debouncedQ || filters.q.trim()) ||
@@ -217,7 +205,7 @@ export default function ReportsPage() {
     Boolean(filters.direccion.trim()) ||
     Boolean(filters.codigo_postal.trim()) ||
     Boolean(filterProgramIdNum) ||
-    Boolean(filterSupportTypeName) ||
+    Boolean(filterSupportTypeIdNum) ||
     Boolean(filterAreaIdNum) ||
     Boolean(filterOfferingIdNum) ||
     filters.is_active !== 'true';
@@ -440,7 +428,7 @@ export default function ReportsPage() {
 
         <FilterAccordion
           title="Programas, apoyos y servicios"
-          hint="Un programa muestra sus apoyos. Un tipo de apoyo muestra los programas que lo comparten."
+          hint="Filtra por programa social, tipo de apoyo o servicio operativo"
           defaultOpen={false}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -450,25 +438,16 @@ export default function ReportsPage() {
                 className="input"
                 value={filters.program_id}
                 onChange={(e) => {
-                  const programId = e.target.value;
                   setFilters((f) => ({
                     ...f,
-                    program_id: programId,
-                    support_type_name: programHasSupportType(
-                      supportTypes,
-                      programId,
-                      f.support_type_name,
-                    )
-                      ? f.support_type_name
-                      : '',
+                    program_id: e.target.value,
+                    support_type_id: '',
                   }));
                   setPage(1);
                 }}
               >
-                <option value="">
-                  {filterSupportTypeName ? 'Todos con este apoyo' : 'Todos'}
-                </option>
-                {visiblePrograms.map((p) => (
+                <option value="">Todos</option>
+                {supportPrograms.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -479,22 +458,15 @@ export default function ReportsPage() {
               <label className="label">Apoyo (tipo)</label>
               <select
                 className="input"
-                value={filters.support_type_name}
+                value={filters.support_type_id}
                 onChange={(e) => {
-                  const typeName = e.target.value;
-                  setFilters((f) => ({
-                    ...f,
-                    support_type_name: typeName,
-                    program_id: programHasSupportType(supportTypes, f.program_id, typeName)
-                      ? f.program_id
-                      : '',
-                  }));
+                  setFilters((f) => ({ ...f, support_type_id: e.target.value }));
                   setPage(1);
                 }}
               >
-                <option value="">{filterProgramIdNum ? 'Todos en el programa' : 'Todos'}</option>
-                {visibleSupportTypes.map((t) => (
-                  <option key={t.key} value={t.name}>
+                <option value="">Todos</option>
+                {programTypesFiltered.map((t) => (
+                  <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
                 ))}
